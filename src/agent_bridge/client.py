@@ -50,19 +50,65 @@ TOKEN_STALE_HINT = (
 
 
 # ---- token 文档解析（共享约定，3.2）----------------------------------------
+# 启动横幅把主机写作「局域网 IP: …」，故该行需按其键名别名映射到 host，
+# 使"整段粘贴控制台输出"直接可用。
+_KEY_ALIASES = {"局域网 ip": "host"}
+
+
+def _pick_banner_host(value: str) -> str:
+    """从横幅的「局域网 IP」行取值：优先 RFC1918 私网地址，否则取第一个合法地址。
+
+    横幅在多网卡机器上会列出多个逗号分隔的地址（可能含 VPN 地址），故需挑选。
+    私网判别刻意手写区间而**不用** ``ipaddress.is_private``：后者的判定集合随
+    Python 版本演进（且把 127/8、169.254/16、198.18/15 等非 LAN 地址也算作私网），
+    而本工具承诺目标机任意 Python 3.7+ 行为一致。
+
+    返回空串表示该行不含任何可解析地址（横幅未检测到地址时会打印整句说明，
+    照搬为 host 只会得到难以归因的连接失败）。
+    """
+    candidates = []
+    for part in value.split(","):
+        part = part.strip()
+        try:
+            if isinstance(ipaddress.ip_address(part), ipaddress.IPv4Address):
+                candidates.append(part)
+        except ValueError:
+            continue
+    if not candidates:
+        return ""
+    for addr in candidates:
+        first, second = int(addr.split(".")[0]), int(addr.split(".")[1])
+        if first == 10 or (first == 172 and 16 <= second <= 31) or (first == 192 and second == 168):
+            return addr
+    return candidates[0]
+
+
 def parse_token_doc(text: str) -> dict:
     """解析 token 文档内容，返回 {key: value}（键小写）。
 
-    约定：仅识别 `key: value` 行；以 # 开头的整行注释与空行忽略；
-    键与值两侧空白不计；不支持行内注释（值中出现的 # 属于值本身）。
+    约定：识别 `key: value` 行，并识别**被控端启动横幅的行形态**（整段粘贴即可用）——
+    横幅的 Token 行映射为 token，「局域网 IP」行映射为 host（多地址时私网优先）。
+    以 # 开头的整行注释与空行忽略；键与值两侧空白不计；不支持行内注释（值中出现的
+    # 属于值本身）；**值为空的行不覆盖已有值**（否则模板里待填的空字段会清掉粘贴进来
+    的取值）；同名键按行序后者覆盖前者。
     """
     result = {}
     for line in text.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#") or ":" not in stripped:
             continue
-        key, _, value = stripped.partition(":")
-        result[key.strip().lower()] = value.strip()
+        raw_key, _, value = stripped.partition(":")
+        raw_key = raw_key.strip().lower()
+        key = _KEY_ALIASES.get(raw_key, raw_key)
+        value = value.strip()
+        if not value:  # 空值不覆盖：模板中的待填字段与粘贴内容可安全并存
+            continue
+        if key == "host" and raw_key != "host":
+            # 来自横幅的「局域网 IP」行：必须挑得出地址，否则该行无效
+            value = _pick_banner_host(value)
+            if not value:
+                continue
+        result[key] = value
     return result
 
 
