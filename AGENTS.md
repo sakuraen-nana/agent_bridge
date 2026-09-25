@@ -72,7 +72,7 @@
 run.py              单一入口（可被 Python 2 解析、自定位、自带自举）
 src/agent_bridge/   程序主体（server / client / bootstrap）
 tests/              标准库 unittest 测试
-openspec/           规格与提案（changes/ 在途，specs/ 已归档主规格）
+openspec/           规格与提案（specs/ 为当前生效主规格，changes/ 含在途与已归档变更）
 .claude/ .agents/   agent 规则与技能（openspec-* 工作流）
 ```
 

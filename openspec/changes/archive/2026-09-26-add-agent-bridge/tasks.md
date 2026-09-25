@@ -8,9 +8,9 @@
 ## 1. 仓库脚手架与约定落档
 
 - [x] 1.1 新增 `.gitignore`（`bridge.local.md`、`__pycache__/`、`*.pyc`、`.venv/` 等）；验证：`git check-ignore -v bridge.local.md` 命中 `.gitignore:2`，按模板创建正式文件后 `git status` 不显示它 —— 证据：提交 `d4ede47`
-- [x] 1.2 填写 `AGENTS.md`（design D8：仓库定位"独立通用工具、只维护通用事实"、OpenSpec 工作流、单一 Python 入口约定、提交约定（委派 git-commit skill）、文档写法"仓库自足"）；验证：文件非空且覆盖上述各点，**不含任何具体机器名、部署路径与使用方项目名称**（`grep -nEi "hermes|DESKTOP-TI3AMEE|se77-ws02|192\.168\.31\.|file_forest|File Forest|/data/|sakuraen" AGENTS.md README.md` 零命中；LICENSE 的版权署名为许可信息的作者项，不在守卫范围），克隆仓库的读者无需外部信息即可据此工作 —— 证据：提交 `d4ede47`，该命令零命中（除 LICENSE 作者项）
+- [x] 1.2 填写 `AGENTS.md`（design D8：仓库定位"独立通用工具、只维护通用事实"、OpenSpec 工作流、单一 Python 入口约定、提交约定（委派 git-commit skill）、文档写法"仓库自足"）；验证：文件非空且覆盖上述各点，**不含任何具体机器名、部署路径与使用方项目名称**（以使用方实际机器名 / IP 段 / 部署路径构造的守卫模式串——**模式串本身不入库**，故此处不记录——对 `AGENTS.md` / `README.md` 零命中；LICENSE 的版权署名为许可信息的作者项，不在守卫范围），克隆仓库的读者无需外部信息即可据此工作 —— 证据：提交 `d4ede47`，该命令零命中（除 LICENSE 作者项）
 - [x] 1.3 填写 `openspec/config.yaml` 的 context（语言 Chinese / SHALL-MUST 保留英文、技术栈 Python 标准库、部署模型（通用描述：可独立部署于被控项目目录之外）、行为范围冻结）；验证：`openspec context --json` 正常，context 非空且不含具体机器名、使用方项目名称 —— 证据：提交 `27155ce`，`openspec validate add-agent-bridge --strict --no-interactive` 通过
-- [x] 1.4 新增 `README.md`（工具自身文档：启动方法（两平台）、Windows 防火墙首次授权提示、token 填写流程、agent 使用流程、安全声明、控制台输出说明；使用模型用通用描述）；验证：按 README 步骤在任意工作目录跑通一次回环（启动服务 → 另一终端 scan/hello）—— 见 §4.2 实跑；`grep -nEi "hermes|DESKTOP-TI3AMEE|se77-ws02|192\.168\.31\.|file_forest|File Forest|/data/|sakuraen" README.md` 零命中 —— 证据：提交 `3cd1e89`
+- [x] 1.4 新增 `README.md`（工具自身文档：启动方法（两平台）、Windows 防火墙首次授权提示、token 填写流程、agent 使用流程、安全声明、控制台输出说明；使用模型用通用描述）；验证：按 README 步骤在任意工作目录跑通一次回环（启动服务 → 另一终端 scan/hello）—— 见 §4.2 实跑；同上守卫（模式串不入库）对 `README.md` 零命中 —— 证据：提交 `3cd1e89`
 - [x] 1.5 首个提交：脚手架（`.agents/`、`.claude/`、`openspec/`、`AGENTS.md`、`.gitignore`、`README.md`）入库；验证：`git log` 有该提交且 `git status` 干净（除忽略项）—— 证据：提交 `d4ede47`（脚手架）、`27155ce`（变更制品）、`3cd1e89`（README）
 
 ## 2. 包与入口实现（按规格实现首版）
@@ -25,8 +25,8 @@
 ## 3. 测试（stdlib unittest，design D6）
 
 - [x] 3.1 `tests/` 骨架与夹具：进程内起服务实例（端口覆盖为临时端口）、临时目录 token 文档；token 文档解析用例（含多组同名 token/host 后者覆盖、注释与空行）；验证：`python3 -m unittest discover -s tests` 相应用例通过 —— 证据：提交 `aa7736d`
-- [x] 3.2 认证与 hello 用例组：无 token / 错 token → 统一 404 且无业务响应；有效 token → hello 字段与运行环境一致；验证：用例通过 —— 证据：`AuthTest` 2 项、`HelloTest` 3 项
-- [x] 3.3 exec 用例组：流式输出、非零退出码、超时（`timed_out:true`）、客户端断开不遗留子进程、长静默（>60s 阈值）不误杀、输出编码（UTF-8 与平台本地编码回退）；验证：用例通过（长静默用例以覆盖 socket 超时阈值实现，不实跑 90 秒）—— 证据：`ExecTest` 8 项（含断开用例以裸 socket 模拟，marker 文件不出现为证）
+- [x] 3.2 认证与 hello 用例组：无 token / 错 token → 统一 404 且无业务响应；有效 token → hello 字段与运行环境一致；验证：用例通过 —— 证据：`AuthTest` 2 项、`HelloTest` 1 项（另有同名类见 test_client 3 项）
+- [x] 3.3 exec 用例组：流式输出、非零退出码、超时（`timed_out:true`）、客户端断开不遗留子进程、长静默（>60s 阈值）不误杀、输出编码（UTF-8 与平台本地编码回退）；验证：用例通过（长静默用例以覆盖 socket 超时阈值实现，不实跑 90 秒）—— 证据：`ExecTest` 9 项（另有同名类见 test_client 2 项；含断开用例以裸 socket 模拟，marker 文件不出现为证）
 - [x] 3.4 download 用例组：文本与二进制文件逐字节一致（哈希比对）、Content-Length 正确、路径不存在与指向目录两类错误区分；验证：用例通过 —— 证据：`DownloadTest` 4 项
 - [x] 3.5 client 用例组：对回环实例的 scan（已确认/未知服务分组）、hello、exec 退出码透传、download 默认落点与 `--out`；验证：用例通过 —— 证据：`ScanTest` 2 项、`ScanNoServerTest` 1 项、`ExecTest`/`HelloTest`/`DownloadTest` 相关项
 - [x] 3.6 入口用例组：经 `run.py` 与直调模块的 stdout 一致与退出码透传、任意工作目录调用、未知子命令提示、解释器版本不足报错；入口文件的"Python 2 可解析"静态扫描守卫（design D7，局限记入用例注释）；验证：用例通过 —— 证据：`EntryStaticTest` 3 项、`EntryPy2ParseGuardTest` 3 项、`EntryRuntimeTest` 3 项
@@ -35,7 +35,7 @@
 ## 4. 客户端侧部署验证（开发机，运行客户端的一侧）
 
 - [x] 4.1 把本仓库克隆/拷入任意非项目目录，复制模板为 `bridge.local.md`；验证：`python3 run.py --help` 在任意工作目录可用，token 文档解析命中该目录 —— 证据：克隆到一个与被操作目录无包含关系的临时目录，`cd /` 下以绝对路径运行 `--help` 正常；token 文档位于该副本根并被正确解析
-- [x] 4.2 回环全链路实跑：启动服务 → scan 定位 → hello → exec（成功/失败/超时各一条）→ download 哈希一致 → 无 token 请求 404；验证：命令与输出留作证据 —— 证据（全部经部署副本、cwd 任意）：scan 命中 127.0.0.1（工作目录显示为副本目录）；hello `agent-bridge/0.1.0`；exec `echo` 退出码 0、`exit 3` 退出码 3；download README 哈希与源文件一致（`ac87e58…`）；错 token 退出码 4。超时一项由 §3.3 用例覆盖（回环实跑略）
+- [x] 4.2 回环全链路实跑：启动服务 → scan 定位 → hello → exec（成功/失败/超时各一条）→ download 哈希一致 → 无 token 请求 404；验证：命令与输出留作证据 —— 证据（全部经部署副本、cwd 任意）：scan 命中 127.0.0.1（工作目录显示为副本目录）；hello `agent-bridge/0.1.0`（当时版本）；exec `echo` 退出码 0、`exit 3` 退出码 3；download README 哈希与源文件一致（`ac87e58…`）；错 token 退出码 4。超时一项由 §3.3 用例覆盖（回环实跑略）
 
 ## 5. 被控机侧部署验证（一台 Windows 被控机；要求：部署于被控项目目录之外）
 
