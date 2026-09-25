@@ -32,7 +32,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 BRIDGE_PORT = 37777  # 固定端口（已确认不可更换，占用即失败，绝不自动换端口）
-BRIDGE_VERSION = "agent-bridge/0.2.0"
+BRIDGE_VERSION = "agent-bridge/0.3.0"
 DEFAULT_TIMEOUT_SECONDS = 1800
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
