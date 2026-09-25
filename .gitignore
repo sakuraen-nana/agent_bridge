@@ -1,0 +1,13 @@
+# 连接文档（含有效 token，等价被控机控制权）：仅本地保存，严禁入库 / 进任何同步渠道
+bridge.local.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# 测试与临时产物
+.pytest_cache/
+.coverage
+htmlcov/
