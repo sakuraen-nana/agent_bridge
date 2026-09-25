@@ -1,0 +1,32 @@
+schema: spec-driven
+
+context: |
+  Language: Chinese
+  All artifacts must be written in Chinese.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+
+  # 项目背景
+  agent-bridge 是局域网远程执行桥：被控端以仅标准库的 Python 服务提供受 token 保护的
+  命令执行与文件下载；agent 侧客户端（scan / hello / exec / download）经局域网调用。
+  用于跨机器自主完成开发测试动作（拉仓库、触发构建与测试、推提交、取回产物）。
+
+  本仓库是独立、纯净的工具软件：文档与规格只维护工具自身的通用行为、用法与约束；
+  机器清单、部署拓扑、凭据位置、与任何使用方项目的关联不在本仓库记录
+  （见 AGENTS.md「仓库定位：独立通用工具」）。
+
+  # 技术栈
+  - 纯 Python 标准库（零第三方运行时依赖），目标机任意 Python 3.7+ 可运行
+  - 程序主体：`src/agent_bridge/{server,client,bootstrap}.py`
+  - 统一入口：仓库根 `run.py`（自定位、整文件可被 Python 2 解析、自带自举）
+  - 测试：标准库 unittest（`tests/`，`python3 -m unittest discover -s tests`）
+
+  # 运行模型
+  - 被控端监听固定端口 37777（绑定 0.0.0.0，占用即失败，不自动换端口）
+  - token 每次启动随机生成（≥24 字节熵）、仅存进程内存、重启即轮换
+  - token 文档 `bridge.local.md` 位于工具根目录（.gitignore 排除，模板入库）；
+    多组 `token` / `host` 字段按"后者覆盖"解析
+  - 工具可部署于任意位置（推荐被控项目目录之外）；整目录拷贝即可运行，无安装步骤
+
+  # 行为契约
+  - 协议、API 形态、退出码、控制台留痕等外部可观察行为以 `openspec/specs/` 为准；
+    实现不得静默偏离规格——需要偏离时先走提案改规格
