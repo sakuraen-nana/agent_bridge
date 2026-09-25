@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(TESTS_DIR)
@@ -71,6 +72,28 @@ def capture_console():
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         yield out
+
+
+def wait_until(predicate, timeout=3.0, interval=0.02):
+    """轮询直到 predicate() 为真（超时返回最后一次结果）。
+
+    留痕由服务端线程写出，与响应完成之间**没有先后保证**（例如 hello 先发响应、
+    再打印响应小节）——断言捕获到的留痕前须等其收尾行出现，否则读到的可能是
+    还没写完的半截缓冲。
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        if predicate():
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(interval)
+
+
+def await_trace(out, blocks=1, timeout=3.0):
+    """等到（并返回）捕获到的留痕写完 ``blocks`` 个请求块。"""
+    wait_until(lambda: out.getvalue().count("└──") >= blocks, timeout=timeout)
+    return out.getvalue()
 
 
 def port_is_free(port, host="127.0.0.1"):

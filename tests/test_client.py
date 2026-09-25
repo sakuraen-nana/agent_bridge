@@ -56,6 +56,36 @@ class ClientTestBase(unittest.TestCase):
         return code, out.getvalue(), err.getvalue()
 
 
+class PastedBannerDocTest(ClientTestBase):
+    """把启动横幅整段粘进 token 文档后，client 无需 --host 即可用（端到端）。"""
+
+    def write_banner(self, ip_line, extra=""):
+        banner = (
+            "  agent-bridge 被控端服务器已启动（仅限可信局域网使用）\n"
+            "------------------------------------------------------------------\n"
+            "  Token    : {token}\n"
+            "  端口     : 37777（绑定 0.0.0.0）\n"
+            "  局域网 IP: {ip_line}\n"
+            "  版本     : agent-bridge/0.1.0\n"
+            "------------------------------------------------------------------\n"
+        ).format(token=self.srv.token, ip_line=ip_line)
+        with open(self.doc, "w", encoding="utf-8") as fh:
+            fh.write(banner + extra)
+
+    def test_pasted_banner_usable_without_host_arg(self):
+        self.write_banner("127.0.0.1")
+        code, out, err = self.run_client("hello")
+        self.assertEqual(code, 0, err)
+        self.assertIn('"version"', out)
+
+    def test_trailing_host_line_overrides_banner(self):
+        # 横幅列的是不可达地址，末尾另写一行 host: 覆盖后即可用
+        self.write_banner("203.0.113.7", extra="host: 127.0.0.1\n")
+        code, out, err = self.run_client("hello")
+        self.assertEqual(code, 0, err)
+        self.assertIn('"version"', out)
+
+
 class HelloTest(ClientTestBase):
     def test_hello_ok(self):
         self.write_doc(self.srv.token)

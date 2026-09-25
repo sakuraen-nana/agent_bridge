@@ -195,7 +195,7 @@ class TraceFormatTest(unittest.TestCase):
     def test_sections_use_titles_and_aligned_fields(self):
         with support.TestServer() as srv, support.capture_console() as out:
             support.request(srv.port, "POST", "/exec", srv.token, {"command": "echo t"})
-        text = out.getvalue()
+            text = support.await_trace(out)
         self.assertIn("▸ 请求参数", text)
         self.assertIn("▸ 实时输出", text)
         field_lines = [ln for ln in text.splitlines() if ln.startswith("│       ") and " = " in ln]
@@ -207,7 +207,7 @@ class TraceFormatTest(unittest.TestCase):
     def test_hello_response_shown_field_by_field(self):
         with support.TestServer() as srv, support.capture_console() as out:
             support.request(srv.port, "POST", "/hello", srv.token, {})
-        text = out.getvalue()
+            text = support.await_trace(out)   # hello 先发响应后写留痕，须等收尾行
         self.assertIn("▸ 响应", text)
         self.assertIn(server.BRIDGE_VERSION, text)
         self.assertIn(server.WORK_DIR, text)  # 工作目录字段与默认工作目录一致
@@ -215,7 +215,7 @@ class TraceFormatTest(unittest.TestCase):
     def test_download_shows_raw_and_resolved_path(self):
         with support.TestServer() as srv, support.capture_console() as out:
             support.request(srv.port, "POST", "/download", srv.token, {"path": "README.md"})
-        text = out.getvalue()
+            text = support.await_trace(out)
         self.assertRegex(text, r"path\s+= README\.md")                     # 调用方传入的原始值
         self.assertIn(os.path.join(server.WORK_DIR, "README.md"), text)    # 解析后的绝对路径
         with open(os.path.join(server.WORK_DIR, "README.md"), encoding="utf-8") as fh:
@@ -226,8 +226,8 @@ class TraceFormatTest(unittest.TestCase):
             status, _, _ = support.request(srv.port, "POST", "/exec", srv.token,
                                            {"command": "echo should-not-run",
                                             "cwd": "/ab-no-such-dir"})
+            text = support.await_trace(out)
         self.assertEqual(status, 400)
-        text = out.getvalue()
         self.assertIn("▸ 请求参数", text)
         self.assertIn("echo should-not-run", text)   # 被拒请求的参数同样完整
         self.assertIn("/ab-no-such-dir", text)
@@ -236,7 +236,7 @@ class TraceFormatTest(unittest.TestCase):
     def test_unauthenticated_keeps_truncated_preview(self):
         with support.TestServer() as srv, support.capture_console() as out:
             support.request(srv.port, "POST", "/exec", "wrong-token", {"command": "echo secret"})
-        text = out.getvalue()
+            text = support.await_trace(out)
         self.assertIn("请求体预览", text)
         self.assertIn("未解析未执行", text)
         self.assertNotIn("▸ 请求参数", text)          # 未认证者不进入完整参数显示
@@ -245,7 +245,7 @@ class TraceFormatTest(unittest.TestCase):
         body = {"pad": "A" * (server._BLOCK_LIMIT_BYTES + 1000)}
         with support.TestServer() as srv, support.capture_console() as out:
             support.request(srv.port, "POST", "/unknown-endpoint", srv.token, body)
-        text = out.getvalue()
+            text = support.await_trace(out)
         self.assertIn("已省略", text)
         self.assertIn("单段上限 64KB", text)
 
@@ -253,8 +253,8 @@ class TraceFormatTest(unittest.TestCase):
     def test_exec_output_stream_not_subject_to_block_limit(self):
         with support.TestServer() as srv, support.capture_console() as out:
             status, events = support.exec_events(srv.port, srv.token, "seq 1 20000")
+            text = support.await_trace(out)
         self.assertEqual(status, 200)
-        text = out.getvalue()
         self.assertNotIn("已省略", text)      # 实时输出流不受单段上限
         self.assertIn("\n20000\n", text)      # 末行完整回显
         self.assertEqual(support.output_text(events).count("\n"), 20000)
