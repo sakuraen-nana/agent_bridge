@@ -188,7 +188,7 @@ def cmd_scan(args):
         try:
             net = ipaddress.ip_network(args.cidr, strict=False)
         except ValueError:
-            print(f"[错误] 无效网段: {args.cidr}（示例格式 192.168.31.0/24）", file=sys.stderr)
+            print(f"[错误] 无效网段: {args.cidr}（示例格式 192.168.1.0/24）", file=sys.stderr)
             sys.exit(2)
         if net.version != 4:
             print("[错误] 本工具仅支持 IPv4 网段扫描", file=sys.stderr)
@@ -364,7 +364,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="subcommand", required=True)
 
     p_scan = sub.add_parser("scan", help="扫描本机网段，定位并确认 bridge 服务器")
-    p_scan.add_argument("--cidr", help="扫描网段（如 192.168.31.0/24），缺省为本机主网段 /24")
+    p_scan.add_argument("--cidr", help="扫描网段（如 192.168.1.0/24），缺省为本机主网段 /24")
     p_scan.add_argument("--token", help="验证用 token（缺省读 token 文档）")
     p_scan.set_defaults(func=cmd_scan)
 
