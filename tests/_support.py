@@ -8,7 +8,9 @@
 - HTTP 小工具：直接以 ``http.client`` 发请求，便于做认证负路径与流式解析。
 """
 
+import contextlib
 import http.client
+import io
 import json
 import os
 import shutil
@@ -29,11 +31,17 @@ from agent_bridge import server as server_mod  # noqa: E402
 class TestServer:
     """进程内服务实例（上下文管理器）。"""
 
-    def __init__(self, token="test-token-123", handler_timeout=None, port=0, host="127.0.0.1"):
+    def __init__(self, token="test-token-123", handler_timeout=None, port=0, host="127.0.0.1",
+                 work_dir=None):
         self.token = token
-        self._saved = (server_mod.BRIDGE_PORT, server_mod.TOKEN, server_mod.BridgeHandler.timeout)
+        self._saved = (server_mod.BRIDGE_PORT, server_mod.TOKEN, server_mod.BridgeHandler.timeout,
+                       server_mod.WORK_DIR, server_mod.WORK_DIR_FROM_ARG)
         server_mod.BRIDGE_PORT = port
         server_mod.TOKEN = token
+        if work_dir is not None:
+            # 模拟 --workdir：默认工作目录由夹具指定，用例无需真的走启动参数
+            server_mod.WORK_DIR = work_dir
+            server_mod.WORK_DIR_FROM_ARG = True
         if handler_timeout is not None:
             # 覆盖连接层 socket 超时阈值：长静默行为无需实跑 60 秒即可验证
             server_mod.BridgeHandler.timeout = handler_timeout
@@ -46,8 +54,8 @@ class TestServer:
     def close(self):
         self.httpd.shutdown()
         self.httpd.server_close()
-        (server_mod.BRIDGE_PORT, server_mod.TOKEN,
-         server_mod.BridgeHandler.timeout) = self._saved
+        (server_mod.BRIDGE_PORT, server_mod.TOKEN, server_mod.BridgeHandler.timeout,
+         server_mod.WORK_DIR, server_mod.WORK_DIR_FROM_ARG) = self._saved
 
     def __enter__(self):
         return self
@@ -55,6 +63,14 @@ class TestServer:
     def __exit__(self, *exc):
         self.close()
         return False
+
+
+@contextlib.contextmanager
+def capture_console():
+    """捕获服务端控制台留痕（``_log`` 走 print，故重定向 stdout 即可）。"""
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        yield out
 
 
 def port_is_free(port, host="127.0.0.1"):

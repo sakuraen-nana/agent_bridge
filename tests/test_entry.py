@@ -129,5 +129,30 @@ class EntryRuntimeTest(unittest.TestCase):
         self.assertEqual(result.returncode, 5)
 
 
+class EntryServerArgTest(unittest.TestCase):
+    """被控端启动参数经入口原样转发。
+
+    不需占用产品端口：无效目录在绑定端口**之前**就退出，因此这里只走静态与失败路径。
+    """
+
+    def setUp(self):
+        self.tree = support.ToolTree()
+        self.addCleanup(self.tree.cleanup)
+
+    def test_workdir_forwarded_to_subject(self):
+        bogus = os.path.join(tempfile.gettempdir(), "ab-no-such-dir-xyz")
+        entry = self.tree.run_entry("server", "--workdir", bogus)
+        direct = self.tree.run_module("agent_bridge.server", "--workdir", bogus)
+        self.assertEqual(entry.returncode, 2, entry.stderr)
+        self.assertEqual(direct.returncode, 2, direct.stderr)
+        self.assertEqual(entry.stdout, direct.stdout)  # 入口不污染 stdout
+        self.assertIn("路径不存在", entry.stderr)       # 参数确实到达了程序主体
+
+    def test_workdir_without_server_subcommand_is_unknown(self):
+        result = self.tree.run_entry("--workdir", tempfile.gettempdir())
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("未知子命令", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

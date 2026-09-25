@@ -51,7 +51,7 @@ class HelloTest(unittest.TestCase):
             self.assertEqual(status, 200)
             data = json.loads(payload)
             self.assertEqual(data["version"], server.BRIDGE_VERSION)
-            self.assertEqual(data["cwd"], server.START_DIR)
+            self.assertEqual(data["cwd"], server.WORK_DIR)
             self.assertEqual(data["user"], server._current_user())
             for key in ("hostname", "system", "release", "platform", "lan_ips", "started_at"):
                 self.assertIn(key, data)
@@ -87,7 +87,7 @@ class ExecTest(unittest.TestCase):
     def test_cwd_relative_to_server_start_dir(self):
         with support.TestServer() as srv:
             _, events = support.exec_events(srv.port, srv.token, "pwd", cwd=".")
-            self.assertEqual(support.output_text(events).strip(), server.START_DIR)
+            self.assertEqual(support.output_text(events).strip(), server.WORK_DIR)
 
     @POSIX_ONLY
     def test_long_silence_not_mistaken_for_disconnect(self):
@@ -159,9 +159,9 @@ class DownloadTest(unittest.TestCase):
             self.assertEqual(hashlib.sha256(payload).hexdigest(),
                              hashlib.sha256(payload_bytes).hexdigest())
 
-    def test_relative_path_resolves_against_server_start_dir(self):
-        # 相对路径基于服务器启动目录解释：在 START_DIR 下建临时文件，按文件名取回
-        fd, target = tempfile.mkstemp(prefix="ab-rel-", dir=server.START_DIR)
+    def test_relative_path_resolves_against_work_dir(self):
+        # 相对路径基于默认工作目录解释：在该目录下建临时文件，按文件名取回
+        fd, target = tempfile.mkstemp(prefix="ab-rel-", dir=server.WORK_DIR)
         with os.fdopen(fd, "wb") as fh:
             fh.write(b"relative-path-content")
         self.addCleanup(os.unlink, target)
@@ -187,6 +187,77 @@ class DownloadTest(unittest.TestCase):
                 srv.port, "POST", "/download", srv.token, {"path": target_dir})
             self.assertEqual(status, 400)
             self.assertEqual(json.loads(payload)["error"], "路径是目录而非文件")
+
+
+class TraceFormatTest(unittest.TestCase):
+    """控制台留痕：分节排版、认证通过者参数与响应完整显示、未认证者仅截断预览。"""
+
+    def test_sections_use_titles_and_aligned_fields(self):
+        with support.TestServer() as srv, support.capture_console() as out:
+            support.request(srv.port, "POST", "/exec", srv.token, {"command": "echo t"})
+        text = out.getvalue()
+        self.assertIn("▸ 请求参数", text)
+        self.assertIn("▸ 实时输出", text)
+        field_lines = [ln for ln in text.splitlines() if ln.startswith("│       ") and " = " in ln]
+        self.assertGreaterEqual(len(field_lines), 3, field_lines)
+        # 同一小节内字段对齐：等号落在同一列（中文键按显示宽度计）
+        self.assertEqual(len({ln.index(" = ") for ln in field_lines}), 1,
+                         "字段未对齐: {0}".format(field_lines))
+
+    def test_hello_response_shown_field_by_field(self):
+        with support.TestServer() as srv, support.capture_console() as out:
+            support.request(srv.port, "POST", "/hello", srv.token, {})
+        text = out.getvalue()
+        self.assertIn("▸ 响应", text)
+        self.assertIn(server.BRIDGE_VERSION, text)
+        self.assertIn(server.WORK_DIR, text)  # 工作目录字段与默认工作目录一致
+
+    def test_download_shows_raw_and_resolved_path(self):
+        with support.TestServer() as srv, support.capture_console() as out:
+            support.request(srv.port, "POST", "/download", srv.token, {"path": "README.md"})
+        text = out.getvalue()
+        self.assertRegex(text, r"path\s+= README\.md")                     # 调用方传入的原始值
+        self.assertIn(os.path.join(server.WORK_DIR, "README.md"), text)    # 解析后的绝对路径
+        with open(os.path.join(server.WORK_DIR, "README.md"), encoding="utf-8") as fh:
+            self.assertNotIn(fh.readline().strip(), text)                  # 不显示文件内容
+
+    def test_authenticated_rejection_shows_full_params(self):
+        with support.TestServer() as srv, support.capture_console() as out:
+            status, _, _ = support.request(srv.port, "POST", "/exec", srv.token,
+                                           {"command": "echo should-not-run",
+                                            "cwd": "/ab-no-such-dir"})
+        self.assertEqual(status, 400)
+        text = out.getvalue()
+        self.assertIn("▸ 请求参数", text)
+        self.assertIn("echo should-not-run", text)   # 被拒请求的参数同样完整
+        self.assertIn("/ab-no-such-dir", text)
+        self.assertNotIn("请求体预览", text)          # 认证通过者不用截断预览
+
+    def test_unauthenticated_keeps_truncated_preview(self):
+        with support.TestServer() as srv, support.capture_console() as out:
+            support.request(srv.port, "POST", "/exec", "wrong-token", {"command": "echo secret"})
+        text = out.getvalue()
+        self.assertIn("请求体预览", text)
+        self.assertIn("未解析未执行", text)
+        self.assertNotIn("▸ 请求参数", text)          # 未认证者不进入完整参数显示
+
+    def test_oversize_block_annotates_omitted_bytes(self):
+        body = {"pad": "A" * (server._BLOCK_LIMIT_BYTES + 1000)}
+        with support.TestServer() as srv, support.capture_console() as out:
+            support.request(srv.port, "POST", "/unknown-endpoint", srv.token, body)
+        text = out.getvalue()
+        self.assertIn("已省略", text)
+        self.assertIn("单段上限 64KB", text)
+
+    @POSIX_ONLY
+    def test_exec_output_stream_not_subject_to_block_limit(self):
+        with support.TestServer() as srv, support.capture_console() as out:
+            status, events = support.exec_events(srv.port, srv.token, "seq 1 20000")
+        self.assertEqual(status, 200)
+        text = out.getvalue()
+        self.assertNotIn("已省略", text)      # 实时输出流不受单段上限
+        self.assertIn("\n20000\n", text)      # 末行完整回显
+        self.assertEqual(support.output_text(events).count("\n"), 20000)
 
 
 if __name__ == "__main__":
