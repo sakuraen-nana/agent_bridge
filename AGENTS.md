@@ -6,8 +6,11 @@
 
 规格以 `openspec/` 为唯一事实来源；本文件只存「怎么做」的规则。用法与安全声明见 `README.md`。
 
-> **状态（2026-09-25）**：实现尚未落地——本文件描述的入口与目录结构是目标形态；实现与规格
-> 见 `openspec/changes/add-agent-bridge/`（未归档）。该变更归档时请复核并更新本行。
+> **状态（2026-09-26）**：实现已落地——本文件描述的入口与目录结构即当前形态，已在 Linux 与
+> Windows 两平台实跑验证（被控端启动、跨机 exec/download 连通）；行为契约以
+> `openspec/specs/agent-bridge/spec.md` 为准。首版变更已归档于
+> `openspec/changes/archive/2026-09-26-add-agent-bridge/`，其 `tasks.md` §8 列有 8 项未实现的
+> 跟进项（如需推进，逐项另立变更）。
 
 ## 仓库定位：独立通用工具
 
