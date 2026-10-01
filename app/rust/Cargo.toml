@@ -1,0 +1,25 @@
+[package]
+name = "agent_bridge"
+version = "0.0.0"
+description = "agent-bridge 桌面应用核心：设备身份、配置与系统信息（开发中）"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+anyhow = "1.0.104"
+chrono = "0.4.45"
+flutter_rust_bridge = "=2.11.1"
+sys-locale = "0.3.2"
+sysinfo = "0.39.6"
+thiserror = "2.0.21"
+toml_edit = "0.25.15"
+uuid = { version = "1.26.1", features = ["v4"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
