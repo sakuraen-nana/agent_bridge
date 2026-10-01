@@ -1,6 +1,6 @@
 [package]
 name = "agent_bridge"
-version = "0.4.0"
+version = "0.5.0"
 description = "agent-bridge 桌面应用核心：设备身份、配置与系统信息（开发中）"
 edition = "2021"
 publish = false
