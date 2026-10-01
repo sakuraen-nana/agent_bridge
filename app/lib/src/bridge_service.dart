@@ -3,6 +3,9 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'rust/api/device.dart' as rust_device;
 import 'rust/api/init.dart' as rust_init;
 import 'rust/api/init.dart' show AppSnapshot, AutostartInfo;
+import 'rust/api/pair.dart' as rust_pair;
+import 'rust/api/pair.dart'
+    show DiscoveredDeviceInfo, PairOutcomeInfo, PeerStatusInfo, PendingPairingInfo;
 import 'rust/sysinfo_view.dart' show SystemSnapshot;
 
 /// 桥接服务抽象：UI 只依赖本接口，widget 测试注入假实现、不依赖真 Rust 库
@@ -28,6 +31,21 @@ abstract class BridgeService {
 
   /// 托盘宿主是否可用（不可用时关闭窗口即退出）。
   Future<bool> trayHostAvailable();
+
+  /// 发现到的设备列表（含已配对与冲突标记）。
+  Future<List<DiscoveredDeviceInfo>> discoveredDevices();
+
+  /// 当前待决配对请求（无则 null）。
+  Future<PendingPairingInfo?> pairingPending();
+
+  /// 对当前待决请求做出决定（同意 / 拒绝）。
+  Future<void> respondPairing(bool approve);
+
+  /// 向发现到的设备发起配对；同意后自动写入 [[peer]]。
+  Future<PairOutcomeInfo> requestPairing(String uuid);
+
+  /// 已配对设备的在线状态。
+  Future<List<PeerStatusInfo>> peersStatus();
 }
 
 /// 真实实现：走 flutter_rust_bridge 生成的 API。
@@ -54,6 +72,24 @@ class RustBridgeService implements BridgeService {
 
   @override
   Future<bool> trayHostAvailable() => rust_init.trayHostAvailable();
+
+  @override
+  Future<List<DiscoveredDeviceInfo>> discoveredDevices() =>
+      rust_pair.discoveredDevices();
+
+  @override
+  Future<PendingPairingInfo?> pairingPending() => rust_pair.pairingPending();
+
+  @override
+  Future<void> respondPairing(bool approve) =>
+      rust_pair.respondPairing(approve: approve);
+
+  @override
+  Future<PairOutcomeInfo> requestPairing(String uuid) =>
+      rust_pair.requestPairing(uuid: uuid);
+
+  @override
+  Future<List<PeerStatusInfo>> peersStatus() => rust_pair.peersStatus();
 }
 
 /// 从异常中提取面向用户的错误消息。

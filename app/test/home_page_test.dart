@@ -6,6 +6,13 @@ import 'package:agent_bridge_app/src/bridge_service.dart';
 import 'package:agent_bridge_app/src/home_page.dart';
 import 'package:agent_bridge_app/src/rust/api/init.dart'
     show AppSnapshot, AutostartInfo, ElevationSnapshot, FirewallSnapshot, ServerSnapshot;
+import 'package:agent_bridge_app/src/rust/api/pair.dart'
+    show
+        DiscoveredDeviceInfo,
+        DiscoverySnapshot,
+        PairOutcomeInfo,
+        PeerStatusInfo,
+        PendingPairingInfo;
 import 'package:agent_bridge_app/src/rust/sysinfo_view.dart' show SystemSnapshot;
 
 SystemSnapshot _system({List<String>? ips}) => SystemSnapshot(
@@ -24,6 +31,7 @@ AppSnapshot _snapshot({
   ServerSnapshot? server,
   ElevationSnapshot? elevation,
   FirewallSnapshot? firewall,
+  DiscoverySnapshot? discovery,
 }) =>
     AppSnapshot(
       version: '0.0.0',
@@ -41,6 +49,37 @@ AppSnapshot _snapshot({
             applied: false,
             detail: 'ufw 未激活，无需放行',
           ),
+      discovery: discovery ??
+          const DiscoverySnapshot(
+            available: true,
+            detail: '信标监听中（UDP 37778）',
+          ),
+    );
+
+DiscoveredDeviceInfo _discoveredDevice({
+  String uuid = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  String? shortName = 'dev-x',
+  bool paired = false,
+  bool conflicted = false,
+}) =>
+    DiscoveredDeviceInfo(
+      uuid: uuid,
+      shortName: shortName,
+      hostname: 'host-x',
+      port: 37777,
+      sourceIp: '192.168.1.50',
+      paired: paired,
+      conflicted: conflicted,
+    );
+
+PeerStatusInfo _peerStatus(String status) => PeerStatusInfo(
+      uuid: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      shortName: 'dev-x',
+      address: '192.168.1.50',
+      port: 37777,
+      status: status,
+      note: status == 'unauthorized' ? '在线但凭据失效（token 被重置或轮换），请重新配对' : '',
+      conflicted: false,
     );
 
 class _FakeBridgeService implements BridgeService {
@@ -78,6 +117,7 @@ class _FakeBridgeService implements BridgeService {
       server: _current.server,
       elevation: _current.elevation,
       firewall: _current.firewall,
+      discovery: _current.discovery,
     );
     return _current;
   }
@@ -107,6 +147,35 @@ class _FakeBridgeService implements BridgeService {
 
   @override
   Future<bool> trayHostAvailable() async => true;
+
+  List<DiscoveredDeviceInfo> discovered = const [];
+  PendingPairingInfo? pending;
+  List<PeerStatusInfo> peers = const [];
+  PairOutcomeInfo pairingOutcome =
+      const PairOutcomeInfo(status: 'paired', detail: '已配对：dev-x');
+  final List<String> requestPairingCalls = [];
+  final List<bool> respondPairingCalls = [];
+
+  @override
+  Future<List<DiscoveredDeviceInfo>> discoveredDevices() async => discovered;
+
+  @override
+  Future<PendingPairingInfo?> pairingPending() async => pending;
+
+  @override
+  Future<void> respondPairing(bool approve) async {
+    respondPairingCalls.add(approve);
+    pending = null;
+  }
+
+  @override
+  Future<PairOutcomeInfo> requestPairing(String uuid) async {
+    requestPairingCalls.add(uuid);
+    return pairingOutcome;
+  }
+
+  @override
+  Future<List<PeerStatusInfo>> peersStatus() async => peers;
 }
 
 Future<void> _pumpHome(
@@ -312,5 +381,70 @@ void main() {
   testWidgets('托盘不可用时提示关窗即退出', (tester) async {
     await _pumpHome(tester, _FakeBridgeService(_snapshot()), trayReady: false);
     expect(find.textContaining('托盘不可用'), findsOneWidget);
+  });
+
+  testWidgets('发现列表渲染并可发起配对', (tester) async {
+    final service = _FakeBridgeService(_snapshot());
+    service.discovered = [_discoveredDevice()];
+    await _pumpHome(tester, service);
+
+    expect(find.text('发现设备'), findsOneWidget);
+    expect(find.text('dev-x'), findsOneWidget);
+    expect(find.textContaining('192.168.1.50:37777'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('发起配对'));
+    await tester.tap(find.text('发起配对'));
+    await tester.pumpAndSettle();
+
+    expect(service.requestPairingCalls, ['dddddddd-dddd-4ddd-8ddd-dddddddddddd']);
+    expect(find.text('已配对：dev-x'), findsOneWidget);
+  });
+
+  testWidgets('已配对设备不显示配对按钮', (tester) async {
+    final service = _FakeBridgeService(_snapshot());
+    service.discovered = [_discoveredDevice(paired: true)];
+    await _pumpHome(tester, service);
+
+    expect(find.text('已配对'), findsOneWidget);
+    expect(find.text('发起配对'), findsNothing);
+  });
+
+  testWidgets('待决配对请求弹出对话框且同意会回执', (tester) async {
+    final service = _FakeBridgeService(_snapshot());
+    service.pending = PendingPairingInfo(
+      id: BigInt.one,
+      uuid: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      shortName: '其余设备',
+      port: 37777,
+      sourceIp: '192.168.1.60',
+    );
+    await _pumpHome(tester, service);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(find.text('配对请求'), findsOneWidget);
+    expect(find.textContaining('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'), findsOneWidget);
+    expect(find.textContaining('192.168.1.60'), findsOneWidget);
+
+    await tester.tap(find.text('同意'));
+    await tester.pumpAndSettle();
+    expect(service.respondPairingCalls, [true]);
+    expect(find.text('配对请求'), findsNothing);
+  });
+
+  testWidgets('已配对设备三态渲染', (tester) async {
+    final service = _FakeBridgeService(_snapshot());
+    service.peers = [
+      _peerStatus('online'),
+      _peerStatus('unauthorized'),
+      _peerStatus('offline'),
+    ];
+    await _pumpHome(tester, service);
+
+    expect(find.text('已配对设备'), findsOneWidget);
+    // 三态：在线 1 台 + 凭据失效 1 台（其文案含「在线但凭据失效」，同含「在线」字样）+ 离线 1 台
+    expect(find.textContaining('在线'), findsNWidgets(2));
+    expect(find.textContaining('在线但凭据失效'), findsOneWidget);
+    expect(find.textContaining('离线'), findsOneWidget);
   });
 }

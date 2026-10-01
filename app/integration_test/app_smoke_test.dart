@@ -189,6 +189,66 @@ void main() {
     expect(desktopFile.existsSync(), isFalse, reason: '关闭应删除机制文件');
   });
 
+  testWidgets('端到端：发现与配对区块就绪（单实例空态）', (tester) async {
+    await RustLib.init();
+    final snapshot = await RustBridgeService().init();
+    expect(snapshot.discovery.available, isTrue, reason: snapshot.discovery.detail);
+    await tester.pumpWidget(AgentBridgeApp(service: RustBridgeService()));
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('发现设备'));
+    expect(find.textContaining('暂无发现设备'), findsOneWidget);
+    await scrollTo(tester, find.text('已配对设备'));
+    expect(find.textContaining('暂无已配对设备'), findsOneWidget);
+  });
+
+  testWidgets('端到端：图形配对全链路（需外部对端）', (tester) async {
+    final peerUuid = Platform.environment['AGENT_BRIDGE_PEER_UUID'];
+    if (peerUuid == null) {
+      // 未编排外部对端时跳过（真机脚本会提供该变量）
+      return;
+    }
+    await RustLib.init();
+    await RustBridgeService().init();
+    await tester.pumpWidget(AgentBridgeApp(service: RustBridgeService()));
+    await tester.pumpAndSettle();
+
+    // 等待自发现到对端（信标周期 3 秒）
+    var found = false;
+    final deadline = DateTime.now().add(const Duration(seconds: 40));
+    while (!found && DateTime.now().isBefore(deadline)) {
+      final discovered = await RustBridgeService().discoveredDevices();
+      found = discovered.any((device) => device.uuid == peerUuid);
+      if (!found) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+    }
+    expect(found, isTrue, reason: '40 秒内应发现对端信标');
+
+    await tester.pump(const Duration(seconds: 1));
+    await scrollTo(tester, find.text('发起配对'));
+    await tester.tap(find.text('发起配对').first);
+    // 外部脚本会在对端窗口点击「同意」；等到结果 SnackBar（带冒号，
+    // 避免误配「已配对设备」区块标题）
+    await pumpUntilFound(
+      tester,
+      find.textContaining('已配对：'),
+      timeout: const Duration(seconds: 90),
+    );
+
+    // 配置已写入且 CLI 可连通
+    final xdg = Platform.environment['XDG_CONFIG_HOME']!;
+    final configText = File('$xdg/agent-bridge/config.toml').readAsStringSync();
+    expect(configText, contains(peerUuid));
+    final cli = Platform.environment['AGENT_BRIDGE_CLI_BIN']!;
+    final home = Platform.environment['HOME']!;
+    final result = await Process.run(
+      cli,
+      ['hello', peerUuid],
+      environment: {'XDG_CONFIG_HOME': xdg, 'HOME': home},
+    );
+    expect(result.exitCode, 0, reason: 'stderr: ${result.stderr}');
+  });
+
   testWidgets('端到端：端口被占用时界面提示服务端未运行', (tester) async {
     await RustLib.init();
     final portText = Platform.environment['AGENT_BRIDGE_PORT'];
