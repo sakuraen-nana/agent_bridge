@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'bridge_service.dart';
 import 'rust/api/init.dart' show AppSnapshot;
 
-/// 主界面：启动信息面板 + 本机默认短名设置。
+/// 主界面：启动信息面板 + 本机默认短名设置 + 配置分享 + 开机自启。
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.service});
+  const HomePage({super.key, required this.service, this.trayReady = true});
 
   final BridgeService service;
+
+  /// 托盘是否可用（false 时提示「关闭窗口将退出」）。
+  final bool trayReady;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -17,11 +21,55 @@ class _HomePageState extends State<HomePage> {
   AppSnapshot? _snapshot;
   String? _fatalError;
   final TextEditingController _shortNameController = TextEditingController();
+  bool _autostartEnabled = false;
+  String _autostartDetail = '';
+  bool _autostartLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadAutostart();
+  }
+
+  Future<void> _loadAutostart() async {
+    try {
+      final info = await widget.service.autostartStatus();
+      if (!mounted) return;
+      setState(() {
+        _autostartEnabled = info.enabled;
+        _autostartDetail = info.detail;
+        _autostartLoaded = true;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _autostartLoaded = true);
+      _showMessage(readableError(error));
+    }
+  }
+
+  Future<void> _toggleAutostart(bool enabled) async {
+    try {
+      final info = await widget.service.setAutostart(enabled);
+      if (!mounted) return;
+      setState(() {
+        _autostartEnabled = info.enabled;
+        _autostartDetail = info.detail;
+      });
+      _showMessage(enabled ? '已开启开机自启' : '已关闭开机自启');
+    } catch (error) {
+      _showMessage(readableError(error));
+    }
+  }
+
+  Future<void> _copySharePayload() async {
+    try {
+      final payload = await widget.service.sharePayload();
+      await Clipboard.setData(ClipboardData(text: payload));
+      _showMessage('已复制到剪贴板（token 为本次会话短期 token，重启后失效）');
+    } catch (error) {
+      _showMessage(readableError(error));
+    }
   }
 
   @override
@@ -58,6 +106,8 @@ class _HomePageState extends State<HomePage> {
           notice: null,
           system: system,
           server: current.server,
+          elevation: current.elevation,
+          firewall: current.firewall,
         );
       });
     } catch (error) {
@@ -126,7 +176,11 @@ class _HomePageState extends State<HomePage> {
       children: [
         if (snapshot.server.error != null)
           _ErrorCard(text: '服务端未运行：${snapshot.server.error}'),
+        if (!snapshot.elevation.admin)
+          _ErrorCard(text: snapshot.elevation.detail),
         if (snapshot.notice != null) _NoticeCard(text: snapshot.notice!),
+        if (!widget.trayReady)
+          const _NoticeCard(text: '托盘不可用：关闭窗口将退出应用'),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -150,6 +204,8 @@ class _HomePageState extends State<HomePage> {
                       ? '运行中（端口 ${snapshot.server.port}）'
                       : '未运行',
                 ),
+                _InfoRow(label: '管理员权限', value: snapshot.elevation.detail),
+                _InfoRow(label: '防火墙', value: snapshot.firewall.detail),
               ],
             ),
           ),
@@ -184,6 +240,51 @@ class _HomePageState extends State<HomePage> {
                       child: const Text('清空'),
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('本机配置分享', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text(
+                  '复制含本次会话短期 token 的配置片段；直接粘贴到对端 config.toml 即可使用（重启本应用后该 token 失效）。',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _copySharePayload,
+                  icon: const Icon(Icons.copy),
+                  label: const Text('复制本机配置'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 8),
+                Text('开机自启', style: Theme.of(context).textTheme.titleMedium),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('开机自动启动'),
+                  subtitle: Text(_autostartLoaded ? _autostartDetail : '（加载中…）'),
+                  value: _autostartEnabled,
+                  onChanged: _autostartLoaded ? _toggleAutostart : null,
                 ),
               ],
             ),

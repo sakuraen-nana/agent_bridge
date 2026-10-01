@@ -30,7 +30,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppSnapshot dco_decode_app_snapshot(dynamic raw);
 
   @protected
+  AutostartInfo dco_decode_autostart_info(dynamic raw);
+
+  @protected
   bool dco_decode_bool(dynamic raw);
+
+  @protected
+  ElevationSnapshot dco_decode_elevation_snapshot(dynamic raw);
+
+  @protected
+  FirewallSnapshot dco_decode_firewall_snapshot(dynamic raw);
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
@@ -39,7 +48,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<(String, String)> dco_decode_list_record_string_string(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  (String, String) dco_decode_record_string_string(dynamic raw);
 
   @protected
   ServerSnapshot dco_decode_server_snapshot(dynamic raw);
@@ -66,7 +81,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppSnapshot sse_decode_app_snapshot(SseDeserializer deserializer);
 
   @protected
+  AutostartInfo sse_decode_autostart_info(SseDeserializer deserializer);
+
+  @protected
   bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  ElevationSnapshot sse_decode_elevation_snapshot(SseDeserializer deserializer);
+
+  @protected
+  FirewallSnapshot sse_decode_firewall_snapshot(SseDeserializer deserializer);
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
@@ -75,7 +99,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<(String, String)> sse_decode_list_record_string_string(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  (String, String) sse_decode_record_string_string(
+    SseDeserializer deserializer,
+  );
 
   @protected
   ServerSnapshot sse_decode_server_snapshot(SseDeserializer deserializer);
@@ -108,7 +142,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_app_snapshot(AppSnapshot self, SseSerializer serializer);
 
   @protected
+  void sse_encode_autostart_info(AutostartInfo self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_elevation_snapshot(
+    ElevationSnapshot self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_firewall_snapshot(
+    FirewallSnapshot self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
@@ -120,7 +169,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_record_string_string(
+    List<(String, String)> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_string_string(
+    (String, String) self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_server_snapshot(

@@ -215,6 +215,9 @@ fn network_error_maps_to_exit_3() {
     f.write_cli_config(&peers);
     let out = f.cli(&["hello", "dead"]);
     assert_eq!(code(&out), 3, "stderr: {}", stderr(&out));
+    // 错误文案不得携带 token 取值（凭据卫生）
+    assert!(!stderr(&out).contains("token=x"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("token=***"), "{}", stderr(&out));
     f.stop();
 }
 

@@ -51,6 +51,22 @@ pub fn data_dir_from(
     vars: &dyn Fn(&str) -> Option<String>,
     os: TargetOs,
 ) -> Result<PathBuf, AppError> {
+    let euid = current_euid();
+    let passwd = if euid == 0 {
+        std::fs::read_to_string("/etc/passwd").unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let caller_home = caller_home_from(vars, euid, &passwd);
+    data_dir_from_ctx(vars, os, caller_home.as_deref())
+}
+
+/// 解析数据目录（纯函数，全分支可单测）：`caller_home` 为提权时调用者用户的家目录。
+pub fn data_dir_from_ctx(
+    vars: &dyn Fn(&str) -> Option<String>,
+    os: TargetOs,
+    caller_home: Option<&Path>,
+) -> Result<PathBuf, AppError> {
     match os {
         TargetOs::Windows => {
             let appdata = vars("APPDATA").filter(|v| !v.is_empty());
@@ -67,6 +83,10 @@ pub fn data_dir_from(
             if let Some(base) = xdg {
                 return Ok(PathBuf::from(base).join(APP_DIR_NAME));
             }
+            // 以 root 运行（提权）时优先落在调用者用户目录，避免写进 /root
+            if let Some(home) = caller_home {
+                return Ok(home.join(".config").join(APP_DIR_NAME));
+            }
             let home = vars("HOME").filter(|v| !v.is_empty());
             match home {
                 Some(home) => Ok(PathBuf::from(home).join(".config").join(APP_DIR_NAME)),
@@ -81,6 +101,53 @@ pub fn data_dir_from(
 /// 解析数据目录（真实环境版）。
 pub fn resolve_data_dir() -> Result<PathBuf, AppError> {
     data_dir_from(&|k| std::env::var(k).ok(), current_os())
+}
+
+/// 当前有效用户 ID（非 Unix 恒 0，不触发调用者回落）。
+pub fn current_euid() -> u32 {
+    #[cfg(unix)]
+    {
+        unsafe { libc::geteuid() }
+    }
+    #[cfg(not(unix))]
+    {
+        0
+    }
+}
+
+/// 依据 SUDO_USER / PKEXEC_UID 从 /etc/passwd 解析调用者家目录（仅 root 场景有意义）。
+pub fn caller_home_from(
+    vars: &dyn Fn(&str) -> Option<String>,
+    euid: u32,
+    passwd_content: &str,
+) -> Option<PathBuf> {
+    if euid != 0 {
+        return None;
+    }
+    if let Some(name) = vars("SUDO_USER").filter(|v| !v.is_empty() && v != "root") {
+        if let Some(home) = passwd_home(passwd_content, |fields| fields[0] == name) {
+            return Some(home);
+        }
+    }
+    if let Some(uid) = vars("PKEXEC_UID").and_then(|v| v.parse::<u32>().ok()) {
+        if uid != 0 {
+            if let Some(home) = passwd_home(passwd_content, |fields| fields[2] == uid.to_string()) {
+                return Some(home);
+            }
+        }
+    }
+    None
+}
+
+/// 在 /etc/passwd 文本中按谓词查找家目录（第 6 字段）。
+fn passwd_home(passwd_content: &str, predicate: impl Fn(&[&str]) -> bool) -> Option<PathBuf> {
+    for line in passwd_content.lines() {
+        let fields: Vec<&str> = line.split(':').collect();
+        if fields.len() >= 6 && predicate(&fields) && !fields[5].is_empty() {
+            return Some(PathBuf::from(fields[5]));
+        }
+    }
+    None
 }
 
 /// 当前用户主目录（配置未指定 `workdir` 时的默认工作目录）。

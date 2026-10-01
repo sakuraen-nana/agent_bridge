@@ -7,16 +7,44 @@ import '../frb_generated.dart';
 import '../sysinfo_view.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `app_runtime`, `ensure_server`
+// These functions are ignored because they are not marked as `pub`: `app_runtime`, `decide_firewall`, `ensure_server`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AppRuntime`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 
-/// 初始化：解析数据目录、读取/创建配置，启动服务端，返回完整快照。
+/// 初始化：提权检测（最前）→ 配置 → 服务端 → 防火墙 → 快照。
+///
+/// 提权重启路径（Linux pkexec）会直接结束本实例（新实例已在运行）。
 Future<AppSnapshot> appInit() => RustLib.instance.api.crateApiInitAppInit();
 
-/// 仅刷新系统信息（面板的「刷新」动作；身份、配置与服务端状态不变）。
+/// 仅刷新系统信息（面板的「刷新」动作；身份、配置与状态不变）。
 Future<SystemSnapshot> refreshSystem() =>
     RustLib.instance.api.crateApiInitRefreshSystem();
+
+/// 生成「本机配置」TOML 片段（含本次会话短期 token；供复制到剪贴板）。
+Future<String> sharePayload() =>
+    RustLib.instance.api.crateApiInitSharePayload();
+
+/// 地址选择（纯函数，可单测）：排除虚拟/容器接口，私网优先，取第一个。
+Future<String?> selectShareAddress({
+  required List<(String, String)> candidates,
+}) =>
+    RustLib.instance.api.crateApiInitSelectShareAddress(candidates: candidates);
+
+/// 托盘宿主是否可用（design D4 降级判据）。
+///
+/// Linux 上查询会话 D-Bus 是否存在 StatusNotifierWatcher（gdbus/dbus-send 任一可用）；
+/// 检测工具缺失时按不可用处理——宁可降级为关窗即退出，也不产生没有可见入口的幽灵进程。
+/// Windows 恒返回 true（系统托盘始终存在）。
+Future<bool> trayHostAvailable() =>
+    RustLib.instance.api.crateApiInitTrayHostAvailable();
+
+/// 查询开机自启状态。
+Future<AutostartInfo> autostartStatus() =>
+    RustLib.instance.api.crateApiInitAutostartStatus();
+
+/// 设置开机自启（幂等：重复开/关不产生重复项）。
+Future<AutostartInfo> setAutostart({required bool enabled}) =>
+    RustLib.instance.api.crateApiInitSetAutostart(enabled: enabled);
 
 /// 应用启动快照（信息面板的数据面）。
 class AppSnapshot {
@@ -38,6 +66,12 @@ class AppSnapshot {
   /// 服务端状态。
   final ServerSnapshot server;
 
+  /// 管理员权限状态。
+  final ElevationSnapshot elevation;
+
+  /// 防火墙状态。
+  final FirewallSnapshot firewall;
+
   const AppSnapshot({
     required this.version,
     required this.uuid,
@@ -45,6 +79,8 @@ class AppSnapshot {
     this.notice,
     required this.system,
     required this.server,
+    required this.elevation,
+    required this.firewall,
   });
 
   @override
@@ -54,7 +90,9 @@ class AppSnapshot {
       shortName.hashCode ^
       notice.hashCode ^
       system.hashCode ^
-      server.hashCode;
+      server.hashCode ^
+      elevation.hashCode ^
+      firewall.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -66,7 +104,97 @@ class AppSnapshot {
           shortName == other.shortName &&
           notice == other.notice &&
           system == other.system &&
-          server == other.server;
+          server == other.server &&
+          elevation == other.elevation &&
+          firewall == other.firewall;
+}
+
+/// 开机自启状态（桥接面结构）。
+class AutostartInfo {
+  /// 是否已启用。
+  final bool enabled;
+
+  /// 机制名（如 autostart .desktop / HKCU Run）。
+  final String mechanism;
+
+  /// 机制详情（路径或键址）。
+  final String detail;
+
+  const AutostartInfo({
+    required this.enabled,
+    required this.mechanism,
+    required this.detail,
+  });
+
+  @override
+  int get hashCode => enabled.hashCode ^ mechanism.hashCode ^ detail.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AutostartInfo &&
+          runtimeType == other.runtimeType &&
+          enabled == other.enabled &&
+          mechanism == other.mechanism &&
+          detail == other.detail;
+}
+
+/// 提权状态（面板「管理员权限」行）。
+class ElevationSnapshot {
+  /// 是否以管理员/root 运行。
+  final bool admin;
+
+  /// 权限说明或受限模式原因。
+  final String detail;
+
+  const ElevationSnapshot({required this.admin, required this.detail});
+
+  @override
+  int get hashCode => admin.hashCode ^ detail.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ElevationSnapshot &&
+          runtimeType == other.runtimeType &&
+          admin == other.admin &&
+          detail == other.detail;
+}
+
+/// 防火墙状态（面板「防火墙」行）。
+class FirewallSnapshot {
+  /// 命中的管理器名（未检出为 null）。
+  final String? manager;
+
+  /// 管理器是否活跃。
+  final bool active;
+
+  /// 本次是否实际添加了放行规则。
+  final bool applied;
+
+  /// 面向人类的状态说明。
+  final String detail;
+
+  const FirewallSnapshot({
+    this.manager,
+    required this.active,
+    required this.applied,
+    required this.detail,
+  });
+
+  @override
+  int get hashCode =>
+      manager.hashCode ^ active.hashCode ^ applied.hashCode ^ detail.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FirewallSnapshot &&
+          runtimeType == other.runtimeType &&
+          manager == other.manager &&
+          active == other.active &&
+          applied == other.applied &&
+          detail == other.detail;
 }
 
 /// 服务端状态（信息面板 / 横幅展示用）。

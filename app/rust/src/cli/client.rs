@@ -19,6 +19,8 @@ pub fn runtime() -> Result<tokio::runtime::Runtime, CliFailure> {
 
 fn client() -> reqwest::Client {
     reqwest::Client::builder()
+        // 仅限制建连；流式请求（exec）不得设整体超时
+        .connect_timeout(std::time::Duration::from_secs(5))
         .build()
         .expect("构建 HTTP 客户端")
 }
@@ -32,7 +34,24 @@ fn url(peer: &Peer, path: &str) -> String {
 }
 
 fn network_error(e: reqwest::Error) -> CliFailure {
-    CliFailure::Network(format!("连接失败：{e}"))
+    CliFailure::Network(format!("连接失败：{}", sanitize(&e.to_string())))
+}
+
+/// 错误文案脱敏：抹掉 URL 中的 token 取值（reqwest 的 Display 会带上完整 URL）。
+fn sanitize(text: &str) -> String {
+    let Some(start) = text.find("?token=") else {
+        return text.to_string();
+    };
+    let rest = &text[start + "?token=".len()..];
+    let end = rest
+        .find(|c: char| c == ')' || c == ' ' || c == '\n' || c == ',' || c == '"')
+        .map(|p| start + "?token=".len() + p)
+        .unwrap_or(text.len());
+    let mut out = String::with_capacity(text.len());
+    out.push_str(&text[..start]);
+    out.push_str("?token=***");
+    out.push_str(&text[end..]);
+    out
 }
 
 /// 状态处理：成功直通；404 无 JSON 体 → token 被拒；其余错误 → 业务失败（JSON 错误优先）。
@@ -117,7 +136,8 @@ pub async fn exec(peer: &Peer, command: &str, timeout: Option<u64>) -> Result<i3
     let mut exit: Option<(i64, bool)> = None;
     let stdout = std::io::stdout();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| CliFailure::Network(format!("流式读取中断：{e}")))?;
+        let chunk =
+            chunk.map_err(|e| CliFailure::Network(format!("流式读取中断：{}", sanitize(&e.to_string()))))?;
         buffer.extend_from_slice(&chunk);
         while let Some(position) = buffer.iter().position(|b| *b == b'\n') {
             let line: Vec<u8> = buffer.drain(..=position).collect();

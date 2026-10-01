@@ -1,7 +1,10 @@
 pub mod api;
+pub mod autostart;
 pub mod cli;
 pub mod config;
+pub mod elevation;
 pub mod error;
+pub mod firewall;
 mod frb_generated;
 pub mod identity;
 pub mod peers;

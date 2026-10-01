@@ -2,13 +2,13 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 import 'rust/api/device.dart' as rust_device;
 import 'rust/api/init.dart' as rust_init;
-import 'rust/api/init.dart' show AppSnapshot;
+import 'rust/api/init.dart' show AppSnapshot, AutostartInfo;
 import 'rust/sysinfo_view.dart' show SystemSnapshot;
 
 /// 桥接服务抽象：UI 只依赖本接口，widget 测试注入假实现、不依赖真 Rust 库
 /// （design D4/D10）。
 abstract class BridgeService {
-  /// 读取启动快照（解析数据目录、读取/创建配置、采集系统信息）。
+  /// 读取启动快照（解析数据目录、读取/创建配置、启动服务端、检测防火墙）。
   Future<AppSnapshot> init();
 
   /// 设置（[name] 非空）或清空（[name] 为 null）本机短名，返回刷新后的快照。
@@ -16,6 +16,18 @@ abstract class BridgeService {
 
   /// 仅刷新系统信息。
   Future<SystemSnapshot> refreshSystem();
+
+  /// 生成「本机配置」TOML 片段（含本次会话短期 token；供剪贴板）。
+  Future<String> sharePayload();
+
+  /// 查询开机自启状态。
+  Future<AutostartInfo> autostartStatus();
+
+  /// 设置开机自启（幂等）。
+  Future<AutostartInfo> setAutostart(bool enabled);
+
+  /// 托盘宿主是否可用（不可用时关闭窗口即退出）。
+  Future<bool> trayHostAvailable();
 }
 
 /// 真实实现：走 flutter_rust_bridge 生成的 API。
@@ -29,6 +41,19 @@ class RustBridgeService implements BridgeService {
 
   @override
   Future<SystemSnapshot> refreshSystem() => rust_init.refreshSystem();
+
+  @override
+  Future<String> sharePayload() => rust_init.sharePayload();
+
+  @override
+  Future<AutostartInfo> autostartStatus() => rust_init.autostartStatus();
+
+  @override
+  Future<AutostartInfo> setAutostart(bool enabled) =>
+      rust_init.setAutostart(enabled: enabled);
+
+  @override
+  Future<bool> trayHostAvailable() => rust_init.trayHostAvailable();
 }
 
 /// 从异常中提取面向用户的错误消息。

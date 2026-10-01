@@ -241,6 +241,60 @@ fn workdir_read_and_default_none() {
     assert!(outcome.device.workdir.is_none(), "缺省应为 None");
 }
 
+const PASSWD: &str = "root:x:0:0:root:/root:/bin/bash\nalice:x:1000:1000:Alice:/home/alice:/bin/bash\nbob:x:1001:1001:Bob:/home/bob:/bin/sh\n";
+
+#[test]
+fn caller_home_from_sudo_user_then_pkexec_uid() {
+    let env = env_of(&[("SUDO_USER", "alice")]);
+    assert_eq!(
+        config::caller_home_from(&env, 0, PASSWD),
+        Some(std::path::PathBuf::from("/home/alice"))
+    );
+    // SUDO_USER 缺省时看 PKEXEC_UID（数字 UID）
+    let env = env_of(&[("PKEXEC_UID", "1001")]);
+    assert_eq!(
+        config::caller_home_from(&env, 0, PASSWD),
+        Some(std::path::PathBuf::from("/home/bob"))
+    );
+    // 非 root 场景不解释（euid != 0）
+    let env = env_of(&[("SUDO_USER", "alice")]);
+    assert_eq!(config::caller_home_from(&env, 1000, PASSWD), None);
+    // root / 未知用户 → None
+    let env = env_of(&[("SUDO_USER", "root")]);
+    assert_eq!(config::caller_home_from(&env, 0, PASSWD), None);
+    let env = env_of(&[("SUDO_USER", "ghost")]);
+    assert_eq!(config::caller_home_from(&env, 0, PASSWD), None);
+}
+
+#[test]
+fn data_dir_ctx_prefers_xdg_then_caller_home_then_home() {
+    let vars = env_of(&[("HOME", "/root"), ("XDG_CONFIG_HOME", "/xdg")]);
+    let dir = config::data_dir_from_ctx(
+        &vars,
+        TargetOs::Unix,
+        Some(std::path::Path::new("/home/alice")),
+    )
+    .unwrap();
+    assert_eq!(dir, std::path::PathBuf::from("/xdg/agent-bridge"), "XDG 优先");
+
+    let vars = env_of(&[("HOME", "/root")]);
+    let dir = config::data_dir_from_ctx(
+        &vars,
+        TargetOs::Unix,
+        Some(std::path::Path::new("/home/alice")),
+    )
+    .unwrap();
+    assert_eq!(
+        dir,
+        std::path::PathBuf::from("/home/alice/.config/agent-bridge"),
+        "提权时落在调用者目录"
+    );
+
+    let vars = env_of(&[("HOME", "/root")]);
+    let dir = config::data_dir_from_ctx(&vars, TargetOs::Unix, None).unwrap();
+    assert_eq!(dir, std::path::PathBuf::from("/root/.config/agent-bridge"));
+}
+
 #[test]
 fn reset_long_term_token_persists_new_value() {
     let tmp = tempfile::tempdir().unwrap();

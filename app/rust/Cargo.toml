@@ -17,6 +17,7 @@ encoding_rs = "0.8.42"
 flutter_rust_bridge = "=2.11.1"
 futures-util = "0.3.34"
 getrandom = "0.4.3"
+is_elevated = "0.1.2"
 libc = "0.2.189"
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "stream"] }
 serde = { version = "1.0.229", features = ["derive"] }

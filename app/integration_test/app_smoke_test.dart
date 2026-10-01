@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -32,6 +33,17 @@ Future<void> pumpUntilFound(
   }
 }
 
+/// 滚动列表直至目标可见（ListView 懒构建，屏外子项尚未构建时 finder 为空）。
+Future<void> scrollTo(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(
+    finder,
+    220,
+    scrollable: find.byType(Scrollable).first,
+    maxScrolls: 40,
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -51,6 +63,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(snapshot.uuid), findsOneWidget);
     expect(find.textContaining('运行中（端口'), findsOneWidget);
+    // 权限与防火墙状态行（取值随环境变化，只断言有可读说明）
+    expect(find.text('管理员权限'), findsOneWidget);
+    expect(snapshot.elevation.detail, isNotEmpty);
+    expect(find.text('防火墙'), findsOneWidget);
+    expect(snapshot.firewall.detail, isNotEmpty);
 
     final xdg = Platform.environment['XDG_CONFIG_HOME'];
     expect(xdg, isNotNull, reason: '测试须以隔离的 XDG_CONFIG_HOME 运行');
@@ -75,11 +92,13 @@ void main() {
       client.close(force: true);
     }
 
-    // 4) 设置短名：点击输入框聚焦后输入（真实窗口下需先点击以建立文本输入连接），
-    //    UI 保存 → 文件落地 → 重新初始化可读回（重启语义）
+    // 4) 设置短名：滚动到输入区，点击输入框聚焦后输入（真实窗口下需先点击以建立
+    //    文本输入连接），UI 保存 → 文件落地 → 重新初始化可读回（重启语义）
+    await scrollTo(tester, find.byType(TextField));
     await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '端到端-A');
+    await scrollTo(tester, find.text('保存'));
     await tester.tap(find.text('保存'));
     await pumpUntilFound(tester, find.text('短名已保存'));
     expect(configFile.existsSync(), isTrue);
@@ -90,16 +109,84 @@ void main() {
     await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '含 空格');
+    await scrollTo(tester, find.text('保存'));
     await tester.tap(find.text('保存'));
     await pumpUntilFound(tester, find.textContaining('短名无效'));
     expect(configFile.readAsStringSync(), contains('端到端-A'), reason: '被拒后原值不变');
     expect((await RustBridgeService().init()).shortName, '端到端-A');
 
     // 6) 清空：键移除并持久
+    await scrollTo(tester, find.text('清空'));
     await tester.tap(find.text('清空'));
     await pumpUntilFound(tester, find.text('短名已清空'));
     expect(configFile.readAsStringSync(), isNot(contains('short_name')));
     expect((await RustBridgeService().init()).shortName, isNull);
+  });
+
+  testWidgets('端到端：复制本机配置 → 剪贴板片段可直接连通', (tester) async {
+    await RustLib.init();
+    final snapshot = await RustBridgeService().init();
+
+    await tester.pumpWidget(AgentBridgeApp(service: RustBridgeService()));
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('复制本机配置'));
+    await tester.tap(find.text('复制本机配置'));
+    await pumpUntilFound(tester, find.textContaining('已复制到剪贴板'));
+
+    // 读回真实剪贴板
+    final data = await Clipboard.getData('text/plain');
+    final snippet = data?.text ?? '';
+    expect(snippet, contains(snapshot.uuid), reason: '片段应含本机 UUID');
+    expect(snippet, contains('[[peer]]'));
+    expect(snippet, matches(RegExp(r'token = "[0-9a-f]{64}"')), reason: '应含会话 token');
+    expect(snippet, contains('address = "'));
+
+    // 片段写入 CLI 侧配置 → 以该片段的会话 token 连通本机
+    final cli = Platform.environment['AGENT_BRIDGE_CLI_BIN'];
+    expect(cli, isNotNull, reason: '需以 AGENT_BRIDGE_CLI_BIN 指定 agent-bridge 二进制');
+    final receiverHome = Directory.systemTemp.createTempSync('ab-receiver');
+    final receiverConfig = Directory('${receiverHome.path}/agent-bridge')
+      ..createSync(recursive: true);
+    File('${receiverConfig.path}/config.toml').writeAsStringSync(
+      '[device]\nuuid = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"\n'
+      'long_term_token = "${'e' * 64}"\n\n$snippet',
+    );
+    final result = await Process.run(
+      cli!,
+      ['hello', snapshot.uuid],
+      environment: {
+        'XDG_CONFIG_HOME': receiverHome.path,
+        'HOME': receiverHome.path,
+      },
+    );
+    expect(result.exitCode, 0, reason: 'stderr: ${result.stderr}');
+    expect(result.stdout, contains(snapshot.uuid));
+  });
+
+  testWidgets('端到端：开机自启开关写删机制文件', (tester) async {
+    await RustLib.init();
+    await RustBridgeService().init();
+
+    final home = Platform.environment['HOME'];
+    expect(home, isNotNull, reason: '测试须指定 HOME');
+    final desktopFile = File('$home/.config/autostart/agent-bridge.desktop');
+    if (desktopFile.existsSync()) {
+      desktopFile.deleteSync();
+    }
+
+    await tester.pumpWidget(AgentBridgeApp(service: RustBridgeService()));
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.byType(SwitchListTile));
+    await tester.tap(find.byType(SwitchListTile));
+    await pumpUntilFound(tester, find.text('已开启开机自启'));
+    expect(desktopFile.existsSync(), isTrue, reason: '应写入 autostart .desktop');
+    final content = desktopFile.readAsStringSync();
+    expect(content, contains('[Desktop Entry]'));
+    expect(content, contains('Exec='));
+
+    await tester.tap(find.byType(SwitchListTile));
+    await pumpUntilFound(tester, find.text('已关闭开机自启'));
+    expect(desktopFile.existsSync(), isFalse, reason: '关闭应删除机制文件');
   });
 
   testWidgets('端到端：端口被占用时界面提示服务端未运行', (tester) async {
@@ -118,7 +205,8 @@ void main() {
 
       await tester.pumpWidget(AgentBridgeApp(service: RustBridgeService()));
       await tester.pumpAndSettle();
-      expect(find.textContaining('服务端未运行'), findsOneWidget);
+      // 横幅（错误卡）与「服务端」状态行；防火墙行同样含「服务端未运行」字样，故用更精确的断言
+      expect(find.textContaining('服务端未运行：端口'), findsOneWidget);
       expect(find.textContaining('已被占用'), findsOneWidget);
       expect(find.text('未运行'), findsOneWidget);
     } finally {
