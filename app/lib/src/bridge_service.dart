@@ -33,11 +33,19 @@ class RustBridgeService implements BridgeService {
 
 /// 从异常中提取面向用户的错误消息。
 ///
-/// Rust 侧经 anyhow 返回的错误在 Dart 侧表现为 [AnyhowException]（`message`
-/// 即 Rust 错误的完整文案）；其余异常回退到 `toString()`。
+/// Rust 侧经 anyhow 返回的错误在 Dart 侧表现为 [AnyhowException]；其余异常
+/// 回退到 `toString()`。frb 在应用启动时默认开启 `RUST_BACKTRACE`，anyhow
+/// 错误的 Debug 形态因此可能在正文后附带「Stack backtrace:」段——展示前截掉，
+/// 只保留人类可读文案。
 String readableError(Object error) {
   if (error is AnyhowException) {
-    return error.message;
+    return _cleanAnyhowMessage(error.message);
   }
   return error.toString();
+}
+
+String _cleanAnyhowMessage(String message) {
+  final backtraceAt = message.indexOf('Stack backtrace:');
+  final cleaned = backtraceAt >= 0 ? message.substring(0, backtraceAt) : message;
+  return cleaned.trim();
 }
