@@ -6,10 +6,10 @@
 
 规格以 `openspec/` 为唯一事实来源；本文件只存「怎么做」的规则。用法与安全声明见 `README.md`。
 
-> **状态（2026-09-26）**：实现已落地并在 Linux 与 Windows 两平台实跑验证；当前版本 `0.3.0`
-> （`src/agent_bridge/server.py` 的 `BRIDGE_VERSION`，按「开发流程」第 6 条随归档推进）。
-> 行为契约以 `openspec/specs/agent-bridge/spec.md` 为准，当前无在途变更；已归档的变更见
-> `openspec/changes/archive/`，各自 `tasks.md` 末尾列有未实现的跟进项（如需推进，逐项另立变更）。
+> **状态（2026-10-01）**：仓库进入**过渡期**（见下节）——Python 版冻结于 `0.3.0`
+> （`BRIDGE_VERSION`，仅修致命缺陷）；新一代桌面应用（`app/`，Flutter + Rust）自 `0.1.0`
+> 起步，「基座与设备身份」变更已落地。行为契约以 `openspec/specs/` 为准；已归档的变更
+> 见 `openspec/changes/archive/`，各自 `tasks.md` 末尾列有未实现的跟进项（如需推进，逐项另立变更）。
 
 ## 仓库定位：独立通用工具
 
@@ -18,6 +18,15 @@
 - 本仓库的文档与规格**只描述工具自身的通用行为、用法与约束**；
 - **特定使用方的事实不在本仓库**：机器清单与角色、部署拓扑与路径、凭据位置、与某个项目的集成方式（谁在哪台机器上跑哪一侧），一律由使用方各自的仓库存储与维护；
 - 因此本仓库（AGENTS.md / README / openspec 规格）不出现具体机器名与部署路径——需要指代运行环境时用通用描述（"被控机""开发机"）
+
+## 过渡期双实现（2026-10-01 起）
+
+仓库并存两个实现，各自适用不同规则；**新需求一律只进新应用**，Python 版不再接受功能变更。
+
+- **Python 版（冻结）**：`run.py` + `src/agent_bridge/` + `tests/`。仅修致命缺陷；「单一 Python 入口」「零第三方运行时依赖」等约束继续适用于它，但不再为其立新变更；版本源 `BRIDGE_VERSION` 冻结于 `0.3.0`。
+- **桌面应用（现行开发对象）**：`app/` 子项目——Flutter 图形界面（`app/lib/`）+ Rust 核心（`app/rust/src/`），桥接由 flutter_rust_bridge 生成（生成物入库；改动 Rust 桥接面后重跑 `flutter_rust_bridge_codegen generate` 并提交）。目标平台 Windows / Linux（骨架保持可移植，暂不适配 macOS 与移动端）。依赖由 `app/pubspec.lock` 与 `app/rust/Cargo.lock` 锁定（锁文件入库）。**新应用版本源**为 `app/rust/Cargo.toml` 的 `package.version`，出现在信息面板「应用版本」，按「开发流程」第 6 条随归档推进。
+- **规格**：新应用走独立能力 `agent-bridge-app`（`openspec/specs/`），与描述 Python 版的 `agent-bridge` 能力并存；Python 版最终删除时另立变更收尾（删除旧能力并合并命名）。
+- **共同适用**：提交约定、文档写法（仓库自足、中文）、数据与安全红线与 OpenSpec 流程，两实现一致；测试命令分工见 README「开发」一节。
 
 ## 元规则：规则的存放
 
@@ -39,11 +48,10 @@
    "代码就绪""测试通过"不等于验收完成——**未在目标平台（Linux / Windows 被控机）实跑验证的不勾选**。
 5. 实施中若发现规格需要变更，先改规划产物再改代码；范围外的新问题记为该变更的跟进项
    （新增小节 + 未勾选项），不擅自扩大实现范围。
-6. **版本推进（归档即 bump）**：实施完成、执行归档前，把 `BRIDGE_VERSION`
-   （`src/agent_bridge/server.py`，全仓唯一版本源）的 minor 加一；缺陷修复类变更加 patch。
-   该常量出现在 HTTP `Server:` 响应头、hello 响应与启动横幅三处——停滞会让"版本相同、
-   行为不同"无法察觉。数字取归档当时的现值加一，**不预设、不追溯**（同一批次内先后归档
-   的多个变更各自加一）。
+6. **版本推进（归档即 bump）**：实施完成、执行归档前，把对应实现的版本源 minor 加一；缺陷修复类变更加 patch。数字取归档当时的现值加一，**不预设、不追溯**（同一批次内先后归档的多个变更各自加一）。停滞会让"版本相同、行为不同"无法察觉。
+   过渡期有两个版本源，**各随其归属的变更推进，互不联动**：
+   - Python 版：`BRIDGE_VERSION`（`src/agent_bridge/server.py`，出现在 HTTP `Server:` 响应头、hello 响应与启动横幅三处）——**冻结于 0.3.0，不再推进**（Python 版不再有变更归档）；
+   - 新应用：`app/rust/Cargo.toml` 的 `package.version`（全仓唯一之新应用版本源，出现在信息面板「应用版本」）——随 `app/` 的变更归档推进。
 
 ## 工作约定
 
@@ -54,6 +62,8 @@
 - **语言**：注释、文档、提交信息用简体中文；OpenSpec 的结构标题与 SHALL / MUST 等规范关键字保留英文
 
 ## 代码与脚本约束
+
+> 适用性（过渡期）：「单一 Python 入口」与「零第三方运行时依赖」两条仅约束冻结中的 Python 版；新应用 `app/` 的约束见「过渡期双实现」。其余各条（测试、行为契约等）两实现共同适用。
 
 - **单一 Python 入口 `run.py`**（仓库根）：不保留 `.sh` / `.bat` 薄封装；入口**自定位**、**可在任意工作目录下调用**，不要求调用者先 `cd`；入口整文件保持可被 Python 2 解析（误用 Python 2 启动时给出明确提示而非语法错误）；子命令分发给 `src/agent_bridge/` 下的程序主体。自举能力**自带**（`src/agent_bridge/bootstrap.py`），不得依赖本仓库之外的任何文件
 - **零第三方运行时依赖**：仅 Python 标准库，目标机任意 Python 3.7+ 即可运行——部署到被控机不得引入 venv、pip 安装或联网步骤
@@ -69,9 +79,10 @@
 ## 项目结构
 
 ```
-run.py              单一入口（可被 Python 2 解析、自定位、自带自举）
-src/agent_bridge/   程序主体（server / client / bootstrap）
-tests/              标准库 unittest 测试
+run.py              Python 版单一入口（冻结；可被 Python 2 解析、自定位、自带自举）
+src/agent_bridge/   Python 版程序主体（server / client / bootstrap）
+tests/              Python 版标准库 unittest 测试
+app/                桌面应用（Flutter GUI + Rust 核心，flutter_rust_bridge 绑定；现行开发对象）
 openspec/           规格与提案（specs/ 为当前生效主规格，changes/ 含在途与已归档变更）
 .claude/ .agents/   agent 规则与技能（openspec-* 工作流）
 ```

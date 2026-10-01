@@ -4,9 +4,16 @@
 通常运行在另一台机器上）通过它远程执行命令与取回文件，实现"无需人工介入的远程操作闭环"
 （拉仓库、触发构建与测试、推送提交、取回产物）。
 
-工具**独立、自包含、零第三方依赖**：只要求目标机有任意可用的 Python 3（≥3.7）。
-它与任何被控项目无耦合，因此**推荐部署在被控项目目录之外**——被控项目怎么切分支、切提交
-都不影响通道可用性，工具文件也不会出现在被控项目的工作树里形成干扰。
+Python 版工具**独立、自包含、零第三方依赖**：只要求目标机有任意可用的 Python 3（≥3.7）；
+新一代桌面应用见「七、桌面应用（开发中）」。工具与任何被控项目无耦合，因此**推荐部署在被控
+项目目录之外**——被控项目怎么切分支、切提交都不影响通道可用性，工具文件也不会出现在被控
+项目的工作树里形成干扰。
+
+> **过渡期说明（2026-10-01 起）**：本仓库并存两个实现——**Python 版**（`run.py` + `src/` +
+> `tests/`，即下文一~六节内容）：功能冻结、仅修致命缺陷；**桌面应用版**（`app/`，Flutter GUI +
+> Rust 核心，开发中）：逐项承接 Python 版能力，并扩展设备身份、多设备配置与图形化配对。
+> 两者的规格分别为 `openspec/specs/agent-bridge/` 与 `openspec/specs/agent-bridge-app/`。
+> 分工与规则细节见 `AGENTS.md`「过渡期双实现」。
 
 - **`run.py`**（统一入口，位于工具根目录）：跨平台单一入口，不保留 `.sh` / `.bat` 薄封装。
   入口自定位，可在任意工作目录下调用；完成解释器/依赖环境检测与 OS 识别后启动程序主体
@@ -142,11 +149,52 @@ scan 结果分两组输出："已确认的 bridge 服务器"（token 验证通�
 被控机只需任意可用的 Python 3.7+。若某台机器访问本仓库的通道不通，可由使用方经离线
 或局域网传递一份目录，行为不变。
 
-## 七、开发
+## 七、桌面应用（开发中）
+
+`app/` 子项目是新一代跨平台桌面应用（Windows / Linux）：Flutter 图形界面 + Rust 核心，以
+[flutter_rust_bridge](https://cjycode.com/flutter_rust_bridge/) 生成桥接。规划中的能力
+（服务端核心与命令行、权限与防火墙、发现与配对、打包发布）逐变更推进；规划与规格见
+`openspec/`（新应用能力为 `agent-bridge-app`）。
+
+**当前已实现**：设备 UUID 自动生成与持久化、本机默认短名设置、启动信息面板
+（应用版本 / UUID / 短名 / 操作系统 / 区域语言 / 时间 / CPU / 内存 / 局域网 IP）。
+
+**构建前提**（开发机上）：Flutter stable、Rust stable、flutter_rust_bridge_codegen（版本组合以
+本仓库验证过的为准），以及系统构建依赖（Linux：GTK3 开发库、clang、cmake、ninja）。中国大陆
+网络环境可在构建前改用公开镜像（示例，非硬性要求）：
 
 ```bash
-python3 -m unittest discover -s tests -v      # 全量测试
-python3 -m py_compile run.py src/agent_bridge/*.py   # 语法检查
+export PUB_HOSTED_URL=https://pub.flutter-io.cn
+export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
+# cargo：在 ~/.cargo/config.toml 做 source 替换（如 rsproxy.cn 或
+# mirrors.ustc.edu.cn/crates.io-index 的 sparse 索引）
 ```
 
-工作约定见 `AGENTS.md`；行为契约见 `openspec/specs/agent-bridge/spec.md`。
+**构建与运行**：
+
+```bash
+cd app
+flutter build linux            # 产物：build/linux/x64/release/bundle/
+cargo build --manifest-path rust/Cargo.toml    # 仅 Rust 核心
+```
+
+**数据目录**（首次启动自动创建）：Linux `~/.config/agent-bridge/`（或 `$XDG_CONFIG_HOME`），
+Windows `%APPDATA%\agent-bridge\`；其中 `config.toml` 保存设备 UUID 与本机短名，仅当前用户
+可读写（Linux 上文件 0600、目录 0700）。
+
+## 八、开发
+
+```bash
+# Python 版（冻结维护）
+python3 -m unittest discover -s tests -v
+python3 -m py_compile run.py src/agent_bridge/*.py
+
+# 桌面应用（app/ 目录下）
+cargo test --manifest-path rust/Cargo.toml     # Rust 核心单测
+flutter analyze && flutter test                # 静态检查 + widget 测试
+# 端到端（需可用的图形环境，可用 Xvfb 等虚拟显示；以隔离的数据目录运行）：
+XDG_CONFIG_HOME=<临时目录> flutter test integration_test -d linux
+```
+
+工作约定见 `AGENTS.md`；行为契约见 `openspec/specs/`（Python 版 `agent-bridge`、
+新应用 `agent-bridge-app`）。

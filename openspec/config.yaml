@@ -33,3 +33,13 @@ context: |
   # 行为契约
   - 协议、API 形态、退出码、控制台留痕等外部可观察行为以 `openspec/specs/` 为准；
     实现不得静默偏离规格——需要偏离时先走提案改规格
+
+  # 过渡期双实现（2026-10-01 起）
+  - 上文「技术栈 / 运行模型」全部只描述冻结中的 Python 版（仅修致命缺陷、不再立功能变更）；
+    新一代桌面应用在 `app/`：Flutter 图形界面 + Rust 核心，flutter_rust_bridge 生成桥接
+    （生成物入库），依赖由 `app/pubspec.lock` 与 `app/rust/Cargo.lock` 锁定；目标平台
+    Windows / Linux
+  - 新应用的版本源为 `app/rust/Cargo.toml` 的 `package.version`（按「归档即 bump」推进，
+    出现在信息面板「应用版本」）；Python 版 `BRIDGE_VERSION` 冻结于 0.3.0
+  - 新应用的能力规格独立为 `agent-bridge-app`，与 `agent-bridge` 能力并存；新需求一律进
+    新应用
