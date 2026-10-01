@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:agent_bridge_app/src/bridge_service.dart';
 import 'package:agent_bridge_app/src/home_page.dart';
-import 'package:agent_bridge_app/src/rust/api/init.dart' show AppSnapshot;
+import 'package:agent_bridge_app/src/rust/api/init.dart'
+    show AppSnapshot, ServerSnapshot;
 import 'package:agent_bridge_app/src/rust/sysinfo_view.dart' show SystemSnapshot;
 
 SystemSnapshot _system({List<String>? ips}) => SystemSnapshot(
@@ -15,13 +16,19 @@ SystemSnapshot _system({List<String>? ips}) => SystemSnapshot(
       ipAddresses: ips ?? const ['192.168.1.10 (eth0)'],
     );
 
-AppSnapshot _snapshot({String? shortName, String? notice, List<String>? ips}) =>
+AppSnapshot _snapshot({
+  String? shortName,
+  String? notice,
+  List<String>? ips,
+  ServerSnapshot? server,
+}) =>
     AppSnapshot(
       version: '0.0.0',
       uuid: '11111111-2222-4333-8444-555555555555',
       shortName: shortName,
       notice: notice,
       system: _system(ips: ips),
+      server: server ?? const ServerSnapshot(running: true, port: 37777),
     );
 
 class _FakeBridgeService implements BridgeService {
@@ -52,12 +59,17 @@ class _FakeBridgeService implements BridgeService {
       shortName: name,
       notice: null,
       system: _current.system,
+      server: _current.server,
     );
     return _current;
   }
 }
 
 Future<void> _pumpHome(WidgetTester tester, BridgeService service) async {
+  // 用与真实窗口相近的视口，避免按钮被挤出默认 800x600 的测试画布
+  tester.view.physicalSize = const Size(1400, 1000);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
   await tester.pumpWidget(MaterialApp(home: HomePage(service: service)));
   await tester.pumpAndSettle();
 }
@@ -82,6 +94,28 @@ void main() {
   testWidgets('无局域网地址时展示占位', (tester) async {
     await _pumpHome(tester, _FakeBridgeService(_snapshot(ips: const [])));
     expect(find.text('无'), findsOneWidget);
+  });
+
+  testWidgets('服务端运行中展示端口', (tester) async {
+    await _pumpHome(tester, _FakeBridgeService(_snapshot()));
+    expect(find.text('服务端'), findsOneWidget);
+    expect(find.text('运行中（端口 37777）'), findsOneWidget);
+  });
+
+  testWidgets('服务端启动失败展示错误横幅与未运行', (tester) async {
+    await _pumpHome(
+      tester,
+      _FakeBridgeService(_snapshot(
+        server: const ServerSnapshot(
+          running: false,
+          port: 37777,
+          error: '端口 37777 已被占用（不自动更换端口）：Address already in use',
+        ),
+      )),
+    );
+    expect(find.textContaining('服务端未运行'), findsOneWidget);
+    expect(find.textContaining('已被占用'), findsOneWidget);
+    expect(find.text('未运行'), findsOneWidget);
   });
 
   testWidgets('配置重建提示可见', (tester) async {

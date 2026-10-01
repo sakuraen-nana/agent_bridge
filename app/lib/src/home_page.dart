@@ -57,6 +57,7 @@ class _HomePageState extends State<HomePage> {
           shortName: current.shortName,
           notice: null,
           system: system,
+          server: current.server,
         );
       });
     } catch (error) {
@@ -123,6 +124,8 @@ class _HomePageState extends State<HomePage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (snapshot.server.error != null)
+          _ErrorCard(text: '服务端未运行：${snapshot.server.error}'),
         if (snapshot.notice != null) _NoticeCard(text: snapshot.notice!),
         Card(
           child: Padding(
@@ -141,6 +144,12 @@ class _HomePageState extends State<HomePage> {
                 _InfoRow(label: 'CPU', value: system.cpu),
                 _InfoRow(label: '内存', value: system.memory),
                 _InfoRow(label: '局域网 IP', value: ips),
+                _InfoRow(
+                  label: '服务端',
+                  value: snapshot.server.running
+                      ? '运行中（端口 ${snapshot.server.port}）'
+                      : '未运行',
+                ),
               ],
             ),
           ),
@@ -202,6 +211,36 @@ class _FatalErrorView extends StatelessWidget {
             const Icon(Icons.error_outline, size: 40),
             const SizedBox(height: 12),
             Text(message, textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 关键错误提示（如服务端启动失败）。
+class _ErrorCard extends StatelessWidget {
+  const _ErrorCard({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      color: colors.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline, color: colors.onErrorContainer),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(color: colors.onErrorContainer),
+              ),
+            ),
           ],
         ),
       ),
