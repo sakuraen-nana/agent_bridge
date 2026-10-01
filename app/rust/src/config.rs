@@ -1,10 +1,12 @@
-//! 数据目录解析与配置文件（`config.toml`）读写（design D5/D6）。
+//! 数据目录解析与配置文件（`config.toml`）读写（design D5/D6，变更 ② 起为 v2 契约）。
 //!
 //! - 数据目录：Linux `$XDG_CONFIG_HOME/agent-bridge`（缺省 `~/.config/agent-bridge`）、
 //!   Windows `%APPDATA%\agent-bridge`；解析函数以「环境取值函数 + 目标 OS」为参数，
-//!   便于测试注入与变更 ③ 提权场景复用（提权后须按调用者用户解析）。
+//!   便于测试注入与提权场景复用（提权后须按调用者用户解析）。
 //! - 配置文件：UTF-8 TOML，`toml_edit` 最小侵入更新（保留注释与未知键）；
 //!   Unix 上文件 0600、目录首次创建 0700；写入采用同目录临时文件 + 原子改名。
+//! - v2 内容：`[device]`（uuid / short_name / long_term_token / workdir）与可选的
+//!   `[[peer]]` 多段；缺 uuid 或 long_term_token 视为缺省补全（不算损坏）。
 //! - 损坏（TOML 解析失败）：原名另存 `config.toml.bak-<时间戳>` 后重建，
 //!   并在 `LoadOutcome.notice` 里带回供界面提示。
 
@@ -22,6 +24,9 @@ pub const APP_DIR_NAME: &str = "agent-bridge";
 
 /// 配置文件名。
 pub const CONFIG_FILE_NAME: &str = "config.toml";
+
+/// 默认服务端口。
+pub const DEFAULT_PORT: u16 = 37777;
 
 /// 目标操作系统分支（供测试注入覆盖两平台）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,6 +83,22 @@ pub fn resolve_data_dir() -> Result<PathBuf, AppError> {
     data_dir_from(&|k| std::env::var(k).ok(), current_os())
 }
 
+/// 当前用户主目录（配置未指定 `workdir` 时的默认工作目录）。
+pub fn user_home() -> Result<PathBuf, AppError> {
+    let vars = |k: &str| std::env::var(k).ok();
+    match current_os() {
+        TargetOs::Windows => vars("USERPROFILE")
+            .or_else(|| vars("HOME"))
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .ok_or_else(|| AppError::DataDirUnavailable("环境变量 USERPROFILE 未设置".to_string())),
+        TargetOs::Unix => vars("HOME")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .ok_or_else(|| AppError::DataDirUnavailable("环境变量 HOME 未设置".to_string())),
+    }
+}
+
 /// 设备段（`[device]`）的读取结果。
 #[derive(Debug, Clone)]
 pub struct DeviceConfig {
@@ -85,12 +106,32 @@ pub struct DeviceConfig {
     pub uuid: String,
     /// 本机默认短名；`None` 表示未设置。
     pub short_name: Option<String>,
+    /// 长期 token（持久化凭据；仅手动重置）。
+    pub long_term_token: String,
+    /// 默认工作目录（配置原值）；`None` 表示缺省（取用户主目录）。
+    pub workdir: Option<String>,
 }
 
-/// 加载结果：设备配置 + 可选的界面提示（配置损坏重建时为 `Some`）。
+/// 对端设备条目（`[[peer]]`）。
+#[derive(Debug, Clone)]
+pub struct Peer {
+    /// 对端设备 UUID（必填；缺失或非法的条目在读取时跳过）。
+    pub uuid: String,
+    /// 本机为该对端起的短名（可空）。
+    pub short_name: Option<String>,
+    /// 对端地址（主机名或 IP）。
+    pub address: String,
+    /// 对端服务端口（缺省 37777）。
+    pub port: u16,
+    /// 对端提供给我方的 token（可空；为空时 CLI 使用会报配置错误）。
+    pub token: String,
+}
+
+/// 加载结果：设备配置 + 对端列表 + 可选的界面提示（配置损坏重建时为 `Some`）。
 #[derive(Debug, Clone)]
 pub struct LoadOutcome {
     pub device: DeviceConfig,
+    pub peers: Vec<Peer>,
     pub notice: Option<String>,
 }
 
@@ -119,10 +160,27 @@ pub fn set_short_name(data_dir: &Path, name: Option<&str>) -> Result<DeviceConfi
         }
     }
     write_document(&data_dir.join(CONFIG_FILE_NAME), &doc)?;
-    Ok(DeviceConfig {
-        uuid: device_uuid_from_doc(&doc).unwrap_or_default(),
-        short_name: normalized,
-    })
+    Ok(device_config_from_doc(&doc, normalized))
+}
+
+/// 重置长期 token 并持久化（CLI `token reset`）；返回新值。
+pub fn reset_long_term_token(data_dir: &Path) -> Result<String, AppError> {
+    let token = identity::new_token();
+    set_long_term_token(data_dir, &token)?;
+    Ok(token)
+}
+
+/// 写入指定长期 token（持久化）。
+pub fn set_long_term_token(data_dir: &Path, token: &str) -> Result<(), AppError> {
+    let (mut doc, _) = load_document(data_dir)?;
+    ensure_device_table(&mut doc);
+    doc["device"]["long_term_token"] = value(token);
+    write_document(&data_dir.join(CONFIG_FILE_NAME), &doc)
+}
+
+/// 读取长期 token（缺则按补全语义生成并写回）。
+pub fn read_long_term_token(data_dir: &Path) -> Result<String, AppError> {
+    Ok(load_document(data_dir)?.1.device.long_term_token)
 }
 
 /// 加载文档（内部）：返回（文档，加载结果）。文件缺失则创建，损坏则备份重建。
@@ -132,8 +190,9 @@ fn load_document(data_dir: &Path) -> Result<(DocumentMut, LoadOutcome), AppError
 
     if !path.exists() {
         let uuid = identity::new_uuid();
+        let token = identity::new_token();
         let mut doc = DocumentMut::new();
-        doc["device"] = device_item(&uuid);
+        doc["device"] = device_item(&uuid, &token);
         write_document(&path, &doc)?;
         return Ok((
             doc,
@@ -141,7 +200,10 @@ fn load_document(data_dir: &Path) -> Result<(DocumentMut, LoadOutcome), AppError
                 device: DeviceConfig {
                     uuid,
                     short_name: None,
+                    long_term_token: token,
+                    workdir: None,
                 },
+                peers: Vec::new(),
                 notice: None,
             },
         ));
@@ -150,22 +212,44 @@ fn load_document(data_dir: &Path) -> Result<(DocumentMut, LoadOutcome), AppError
     let text = fs::read_to_string(&path).map_err(|e| AppError::ConfigRead(e.to_string()))?;
     match text.parse::<DocumentMut>() {
         Ok(mut doc) => {
+            // 缺 uuid / long_term_token：视为缺省补全（不算损坏，保留其余内容与注释）
+            let mut repaired = false;
             let uuid = match device_uuid_from_doc(&doc) {
                 Some(uuid) => uuid,
                 None => {
-                    // 合法 TOML 但缺 uuid（或值非法）：视为缺省补全，保留其余内容（design D6）
                     let uuid = identity::new_uuid();
                     ensure_device_table(&mut doc);
                     doc["device"]["uuid"] = value(uuid.as_str());
-                    write_document(&path, &doc)?;
+                    repaired = true;
                     uuid
                 }
             };
+            let long_term_token = match device_long_term_token_from_doc(&doc) {
+                Some(token) => token,
+                None => {
+                    let token = identity::new_token();
+                    ensure_device_table(&mut doc);
+                    doc["device"]["long_term_token"] = value(token.as_str());
+                    repaired = true;
+                    token
+                }
+            };
+            if repaired {
+                write_document(&path, &doc)?;
+            }
             let short_name = device_short_name_from_doc(&doc);
+            let workdir = device_workdir_from_doc(&doc);
+            let peers = peers_from_doc(&doc);
             Ok((
                 doc,
                 LoadOutcome {
-                    device: DeviceConfig { uuid, short_name },
+                    device: DeviceConfig {
+                        uuid,
+                        short_name,
+                        long_term_token,
+                        workdir,
+                    },
+                    peers,
                     notice: None,
                 },
             ))
@@ -176,8 +260,9 @@ fn load_document(data_dir: &Path) -> Result<(DocumentMut, LoadOutcome), AppError
             fs::rename(&path, &backup)
                 .map_err(|e| AppError::ConfigWrite(format!("备份损坏配置失败：{e}")))?;
             let uuid = identity::new_uuid();
+            let token = identity::new_token();
             let mut doc = DocumentMut::new();
-            doc["device"] = device_item(&uuid);
+            doc["device"] = device_item(&uuid, &token);
             write_document(&path, &doc)?;
             let backup_name = backup
                 .file_name()
@@ -189,7 +274,10 @@ fn load_document(data_dir: &Path) -> Result<(DocumentMut, LoadOutcome), AppError
                     device: DeviceConfig {
                         uuid,
                         short_name: None,
+                        long_term_token: token,
+                        workdir: None,
                     },
+                    peers: Vec::new(),
                     notice: Some(format!(
                         "配置文件无法解析（{parse_err}），原文件已备份为 {backup_name}，并已重建默认配置",
                     )),
@@ -249,9 +337,10 @@ fn write_document(path: &Path, doc: &DocumentMut) -> Result<(), AppError> {
 }
 
 /// 构造新的 `[device]` 表（以 `Item` 形态便于直接赋值）。
-fn device_item(uuid: &str) -> Item {
+fn device_item(uuid: &str, long_term_token: &str) -> Item {
     let mut table = Table::new();
     table["uuid"] = value(uuid);
+    table["long_term_token"] = value(long_term_token);
     Item::Table(table)
 }
 
@@ -271,6 +360,15 @@ fn device_uuid_from_doc(doc: &DocumentMut) -> Option<String> {
         .map(str::to_string)
 }
 
+/// 从文档读长期 token：非空即有效。
+fn device_long_term_token_from_doc(doc: &DocumentMut) -> Option<String> {
+    doc.get("device")?
+        .get("long_term_token")?
+        .as_str()
+        .filter(|s| !s.trim().is_empty())
+        .map(str::to_string)
+}
+
 /// 从文档读短名：原样取值（手工编辑以文件为准），仅空串视为未设置。
 fn device_short_name_from_doc(doc: &DocumentMut) -> Option<String> {
     doc.get("device")?
@@ -278,6 +376,74 @@ fn device_short_name_from_doc(doc: &DocumentMut) -> Option<String> {
         .as_str()
         .filter(|s| !s.trim().is_empty())
         .map(str::to_string)
+}
+
+/// 从文档读默认工作目录：非空即有效（路径有效性在使用时校验）。
+fn device_workdir_from_doc(doc: &DocumentMut) -> Option<String> {
+    doc.get("device")?
+        .get("workdir")?
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+/// 依据文档组装设备配置（指定短名覆盖文档取值，用于 set_short_name 回读）。
+fn device_config_from_doc(doc: &DocumentMut, short_name: Option<String>) -> DeviceConfig {
+    DeviceConfig {
+        uuid: device_uuid_from_doc(doc).unwrap_or_default(),
+        short_name,
+        long_term_token: device_long_term_token_from_doc(doc).unwrap_or_default(),
+        workdir: device_workdir_from_doc(doc),
+    }
+}
+
+/// 从文档解析 `[[peer]]` 多段；缺 uuid/address 或 uuid 非法的条目跳过（不改写文件）。
+pub fn peers_from_doc(doc: &DocumentMut) -> Vec<Peer> {
+    let mut out = Vec::new();
+    let Some(tables) = doc.get("peer").and_then(Item::as_array_of_tables) else {
+        return out;
+    };
+    for table in tables.iter() {
+        let uuid = table
+            .get("uuid")
+            .and_then(|v| v.as_str())
+            .filter(|s| uuid::Uuid::parse_str(s).is_ok())
+            .map(str::to_string);
+        let address = table
+            .get("address")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        let (Some(uuid), Some(address)) = (uuid, address) else {
+            continue;
+        };
+        let short_name = table
+            .get("short_name")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.trim().is_empty())
+            .map(str::to_string);
+        let port = table
+            .get("port")
+            .and_then(|v| v.as_integer())
+            .and_then(|n| u16::try_from(n).ok())
+            .filter(|p| *p > 0)
+            .unwrap_or(DEFAULT_PORT);
+        let token = table
+            .get("token")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        out.push(Peer {
+            uuid,
+            short_name,
+            address,
+            port,
+            token,
+        });
+    }
+    out
 }
 
 /// 生成唯一的备份路径：`config.toml.bak-<时间戳>`（重名追加 `-N`）。

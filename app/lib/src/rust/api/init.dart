@@ -7,12 +7,14 @@ import '../frb_generated.dart';
 import '../sysinfo_view.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `app_runtime`, `ensure_server`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AppRuntime`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
 
-/// 初始化：解析数据目录、读取/创建配置，返回完整快照。
+/// 初始化：解析数据目录、读取/创建配置，启动服务端，返回完整快照。
 Future<AppSnapshot> appInit() => RustLib.instance.api.crateApiInitAppInit();
 
-/// 仅刷新系统信息（面板的「刷新」动作；身份与配置不变）。
+/// 仅刷新系统信息（面板的「刷新」动作；身份、配置与服务端状态不变）。
 Future<SystemSnapshot> refreshSystem() =>
     RustLib.instance.api.crateApiInitRefreshSystem();
 
@@ -33,12 +35,16 @@ class AppSnapshot {
   /// 系统信息。
   final SystemSnapshot system;
 
+  /// 服务端状态。
+  final ServerSnapshot server;
+
   const AppSnapshot({
     required this.version,
     required this.uuid,
     this.shortName,
     this.notice,
     required this.system,
+    required this.server,
   });
 
   @override
@@ -47,7 +53,8 @@ class AppSnapshot {
       uuid.hashCode ^
       shortName.hashCode ^
       notice.hashCode ^
-      system.hashCode;
+      system.hashCode ^
+      server.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -58,5 +65,32 @@ class AppSnapshot {
           uuid == other.uuid &&
           shortName == other.shortName &&
           notice == other.notice &&
-          system == other.system;
+          system == other.system &&
+          server == other.server;
+}
+
+/// 服务端状态（信息面板 / 横幅展示用）。
+class ServerSnapshot {
+  /// 是否已启动。
+  final bool running;
+
+  /// 监听端口。
+  final int port;
+
+  /// 启动失败时的可读原因。
+  final String? error;
+
+  const ServerSnapshot({required this.running, required this.port, this.error});
+
+  @override
+  int get hashCode => running.hashCode ^ port.hashCode ^ error.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ServerSnapshot &&
+          runtimeType == other.runtimeType &&
+          running == other.running &&
+          port == other.port &&
+          error == other.error;
 }

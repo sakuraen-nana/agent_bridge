@@ -221,15 +221,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppSnapshot dco_decode_app_snapshot(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return AppSnapshot(
       version: dco_decode_String(arr[0]),
       uuid: dco_decode_String(arr[1]),
       shortName: dco_decode_opt_String(arr[2]),
       notice: dco_decode_opt_String(arr[3]),
       system: dco_decode_system_snapshot(arr[4]),
+      server: dco_decode_server_snapshot(arr[5]),
     );
+  }
+
+  @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
   }
 
   @protected
@@ -251,6 +258,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ServerSnapshot dco_decode_server_snapshot(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return ServerSnapshot(
+      running: dco_decode_bool(arr[0]),
+      port: dco_decode_u_16(arr[1]),
+      error: dco_decode_opt_String(arr[2]),
+    );
+  }
+
+  @protected
   SystemSnapshot dco_decode_system_snapshot(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -264,6 +284,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       memory: dco_decode_String(arr[4]),
       ipAddresses: dco_decode_list_String(arr[5]),
     );
+  }
+
+  @protected
+  int dco_decode_u_16(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
   }
 
   @protected
@@ -300,13 +326,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_shortName = sse_decode_opt_String(deserializer);
     var var_notice = sse_decode_opt_String(deserializer);
     var var_system = sse_decode_system_snapshot(deserializer);
+    var var_server = sse_decode_server_snapshot(deserializer);
     return AppSnapshot(
       version: var_version,
       uuid: var_uuid,
       shortName: var_shortName,
       notice: var_notice,
       system: var_system,
+      server: var_server,
     );
+  }
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
   }
 
   @protected
@@ -340,6 +374,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ServerSnapshot sse_decode_server_snapshot(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_running = sse_decode_bool(deserializer);
+    var var_port = sse_decode_u_16(deserializer);
+    var var_error = sse_decode_opt_String(deserializer);
+    return ServerSnapshot(
+      running: var_running,
+      port: var_port,
+      error: var_error,
+    );
+  }
+
+  @protected
   SystemSnapshot sse_decode_system_snapshot(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_platform = sse_decode_String(deserializer);
@@ -359,6 +406,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int sse_decode_u_16(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint16();
+  }
+
+  @protected
   int sse_decode_u_8(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint8();
@@ -373,12 +426,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getInt32();
-  }
-
-  @protected
-  bool sse_decode_bool(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8() != 0;
   }
 
   @protected
@@ -404,6 +451,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.shortName, serializer);
     sse_encode_opt_String(self.notice, serializer);
     sse_encode_system_snapshot(self.system, serializer);
+    sse_encode_server_snapshot(self.server, serializer);
+  }
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
   }
 
   @protected
@@ -436,6 +490,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_server_snapshot(
+    ServerSnapshot self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.running, serializer);
+    sse_encode_u_16(self.port, serializer);
+    sse_encode_opt_String(self.error, serializer);
+  }
+
+  @protected
   void sse_encode_system_snapshot(
     SystemSnapshot self,
     SseSerializer serializer,
@@ -447,6 +512,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.cpu, serializer);
     sse_encode_String(self.memory, serializer);
     sse_encode_list_String(self.ipAddresses, serializer);
+  }
+
+  @protected
+  void sse_encode_u_16(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint16(self);
   }
 
   @protected
@@ -464,11 +535,5 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_i_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putInt32(self);
-  }
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self ? 1 : 0);
   }
 }

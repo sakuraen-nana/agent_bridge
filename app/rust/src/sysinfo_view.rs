@@ -97,3 +97,19 @@ fn ip_addresses() -> Vec<String> {
     }
     out
 }
+
+/// 局域网 IP 地址列表（纯地址、无接口名；供 hello 响应使用）。
+pub fn lan_ip_list() -> Vec<String> {
+    let networks = Networks::new_with_refreshed_list();
+    let mut out = Vec::new();
+    for (_, data) in &networks {
+        for ip_net in data.ip_networks() {
+            if let IpAddr::V4(v4) = ip_net.addr {
+                if !v4.is_loopback() && !v4.is_link_local() && !v4.is_unspecified() && !v4.is_broadcast() {
+                    out.push(v4.to_string());
+                }
+            }
+        }
+    }
+    out
+}

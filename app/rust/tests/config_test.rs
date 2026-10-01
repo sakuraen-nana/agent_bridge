@@ -159,3 +159,99 @@ fn missing_uuid_is_repaired_keeping_short_name() {
     let text = fs::read_to_string(tmp.path().join(CONFIG_FILE_NAME)).unwrap();
     assert!(text.contains(&outcome.device.uuid), "补全结果应写回");
 }
+
+const VALID_UUID: &str = "00000000-0000-4000-8000-000000000000";
+const VALID_UUID_2: &str = "11111111-1111-4111-8111-111111111111";
+
+#[test]
+fn long_term_token_created_persisted_and_repaired() {
+    let tmp = tempfile::tempdir().unwrap();
+    let first = config::load_or_create(tmp.path()).unwrap();
+    let token = first.device.long_term_token.clone();
+    assert_eq!(token.len(), 64, "32 字节 → 64 位十六进制");
+    assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
+    assert!(first.notice.is_none());
+
+    let second = config::load_or_create(tmp.path()).unwrap();
+    assert_eq!(second.device.long_term_token, token, "跨加载应沿用");
+
+    // 移除该键 → 视为缺省补全（生成新值写回、不算损坏、无备份）
+    let path = tmp.path().join(CONFIG_FILE_NAME);
+    let text = fs::read_to_string(&path).unwrap();
+    let cleaned: String = text
+        .lines()
+        .filter(|line| !line.starts_with("long_term_token"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(&path, cleaned).unwrap();
+
+    let third = config::load_or_create(tmp.path()).unwrap();
+    assert_ne!(third.device.long_term_token, token, "应生成新 token");
+    assert!(third.notice.is_none(), "缺字段不算损坏");
+    let backups = fs::read_dir(tmp.path())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().contains(".bak-"))
+        .count();
+    assert_eq!(backups, 0, "不应产生备份");
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.contains(&third.device.long_term_token), "新值应写回");
+}
+
+#[test]
+fn peers_parsed_with_tolerance_and_file_untouched() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join(CONFIG_FILE_NAME);
+    let content = format!(
+        "# 注释\n[device]\nuuid = \"{VALID_UUID}\"\nlong_term_token = \"{}\"\n\n[[peer]]\nuuid = \"{VALID_UUID_2}\"\nshort_name = \"dev-a\"\naddress = \"10.0.0.5\"\n\n[[peer]]\nuuid = \"00000000-0000-4000-8000-000000000002\"\naddress = \"10.0.0.6\"\nport = 40000\ntoken = \"tok\"\n\n[[peer]]\nshort_name = \"bad\"\naddress = \"10.0.0.7\"\n",
+        "a".repeat(64)
+    );
+    fs::write(&path, &content).unwrap();
+
+    let outcome = config::load_or_create(tmp.path()).unwrap();
+    assert_eq!(outcome.peers.len(), 2, "缺 uuid 的条目应被跳过");
+    assert_eq!(outcome.peers[0].short_name.as_deref(), Some("dev-a"));
+    assert_eq!(outcome.peers[0].port, 37777, "端口缺省 37777");
+    assert_eq!(outcome.peers[1].port, 40000);
+    assert_eq!(outcome.peers[1].token, "tok");
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        content,
+        "读取不应改写文件"
+    );
+}
+
+#[test]
+fn workdir_read_and_default_none() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join(CONFIG_FILE_NAME);
+    fs::write(
+        &path,
+        format!(
+            "[device]\nuuid = \"{VALID_UUID}\"\nlong_term_token = \"{}\"\nworkdir = \"/tmp\"\n",
+            "a".repeat(64)
+        ),
+    )
+    .unwrap();
+    let outcome = config::load_or_create(tmp.path()).unwrap();
+    assert_eq!(outcome.device.workdir.as_deref(), Some("/tmp"));
+
+    let tmp2 = tempfile::tempdir().unwrap();
+    let outcome = config::load_or_create(tmp2.path()).unwrap();
+    assert!(outcome.device.workdir.is_none(), "缺省应为 None");
+}
+
+#[test]
+fn reset_long_term_token_persists_new_value() {
+    let tmp = tempfile::tempdir().unwrap();
+    let old = config::load_or_create(tmp.path()).unwrap().device.long_term_token;
+    let new_token = config::reset_long_term_token(tmp.path()).unwrap();
+    assert_ne!(old, new_token);
+    assert_eq!(new_token.len(), 64);
+    assert_eq!(
+        config::read_long_term_token(tmp.path()).unwrap(),
+        new_token
+    );
+    let text = fs::read_to_string(tmp.path().join(CONFIG_FILE_NAME)).unwrap();
+    assert!(text.contains(&new_token));
+}

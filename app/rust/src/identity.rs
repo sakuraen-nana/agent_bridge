@@ -36,3 +36,15 @@ pub fn validate_short_name(input: &str) -> Result<String, AppError> {
 pub fn short_name_compare_key(name: &str) -> String {
     name.trim().to_lowercase()
 }
+
+/// 生成 token：32 字节密码学随机源 → 64 位十六进制（≥24 字节熵达标）。
+pub fn new_token() -> String {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).expect("系统随机源不可用（getrandom 失败）");
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        use std::fmt::Write as _;
+        let _ = write!(out, "{b:02x}");
+    }
+    out
+}

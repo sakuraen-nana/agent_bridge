@@ -212,13 +212,22 @@ impl SseDecode for crate::api::init::AppSnapshot {
         let mut var_shortName = <Option<String>>::sse_decode(deserializer);
         let mut var_notice = <Option<String>>::sse_decode(deserializer);
         let mut var_system = <crate::sysinfo_view::SystemSnapshot>::sse_decode(deserializer);
+        let mut var_server = <crate::api::init::ServerSnapshot>::sse_decode(deserializer);
         return crate::api::init::AppSnapshot {
             version: var_version,
             uuid: var_uuid,
             short_name: var_shortName,
             notice: var_notice,
             system: var_system,
+            server: var_server,
         };
+    }
+}
+
+impl SseDecode for bool {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u8().unwrap() != 0
     }
 }
 
@@ -257,6 +266,20 @@ impl SseDecode for Option<String> {
     }
 }
 
+impl SseDecode for crate::api::init::ServerSnapshot {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_running = <bool>::sse_decode(deserializer);
+        let mut var_port = <u16>::sse_decode(deserializer);
+        let mut var_error = <Option<String>>::sse_decode(deserializer);
+        return crate::api::init::ServerSnapshot {
+            running: var_running,
+            port: var_port,
+            error: var_error,
+        };
+    }
+}
+
 impl SseDecode for crate::sysinfo_view::SystemSnapshot {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -277,6 +300,13 @@ impl SseDecode for crate::sysinfo_view::SystemSnapshot {
     }
 }
 
+impl SseDecode for u16 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u16::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for u8 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -293,13 +323,6 @@ impl SseDecode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_i32::<NativeEndian>().unwrap()
-    }
-}
-
-impl SseDecode for bool {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_u8().unwrap() != 0
     }
 }
 
@@ -343,6 +366,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::init::AppSnapshot {
             self.short_name.into_into_dart().into_dart(),
             self.notice.into_into_dart().into_dart(),
             self.system.into_into_dart().into_dart(),
+            self.server.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -352,6 +376,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::init::AppSnapshot>
     for crate::api::init::AppSnapshot
 {
     fn into_into_dart(self) -> crate::api::init::AppSnapshot {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::init::ServerSnapshot {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.running.into_into_dart().into_dart(),
+            self.port.into_into_dart().into_dart(),
+            self.error.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::init::ServerSnapshot
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::init::ServerSnapshot>
+    for crate::api::init::ServerSnapshot
+{
+    fn into_into_dart(self) -> crate::api::init::ServerSnapshot {
         self
     }
 }
@@ -403,6 +449,14 @@ impl SseEncode for crate::api::init::AppSnapshot {
         <Option<String>>::sse_encode(self.short_name, serializer);
         <Option<String>>::sse_encode(self.notice, serializer);
         <crate::sysinfo_view::SystemSnapshot>::sse_encode(self.system, serializer);
+        <crate::api::init::ServerSnapshot>::sse_encode(self.server, serializer);
+    }
+}
+
+impl SseEncode for bool {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u8(self as _).unwrap();
     }
 }
 
@@ -436,6 +490,15 @@ impl SseEncode for Option<String> {
     }
 }
 
+impl SseEncode for crate::api::init::ServerSnapshot {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.running, serializer);
+        <u16>::sse_encode(self.port, serializer);
+        <Option<String>>::sse_encode(self.error, serializer);
+    }
+}
+
 impl SseEncode for crate::sysinfo_view::SystemSnapshot {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -445,6 +508,13 @@ impl SseEncode for crate::sysinfo_view::SystemSnapshot {
         <String>::sse_encode(self.cpu, serializer);
         <String>::sse_encode(self.memory, serializer);
         <Vec<String>>::sse_encode(self.ip_addresses, serializer);
+    }
+}
+
+impl SseEncode for u16 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u16::<NativeEndian>(self).unwrap();
     }
 }
 
@@ -464,13 +534,6 @@ impl SseEncode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
-    }
-}
-
-impl SseEncode for bool {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_u8(self as _).unwrap();
     }
 }
 

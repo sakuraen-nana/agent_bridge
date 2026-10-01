@@ -25,4 +25,12 @@ pub enum AppError {
     /// 短名不满足规格（去首尾空白后 1–32 字符、不含空白或控制字符）。
     #[error("短名无效：{0}")]
     InvalidShortName(String),
+
+    /// 服务端监听端口被占用（按规格不自动更换端口）。
+    #[error("端口 {0} 已被占用（不自动更换端口）：{1}")]
+    PortInUse(u16, String),
+
+    /// 服务端相关错误（初始化、运行期）。
+    #[error("服务端错误：{0}")]
+    Server(String),
 }

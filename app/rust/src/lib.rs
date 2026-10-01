@@ -1,7 +1,10 @@
 pub mod api;
+pub mod cli;
 pub mod config;
 pub mod error;
 mod frb_generated;
 pub mod identity;
+pub mod peers;
+pub mod server;
 pub mod sysinfo_view;
 pub mod version;
