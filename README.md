@@ -157,7 +157,29 @@ scan 结果分两组输出："已确认的 bridge 服务器"（token 验证通�
 `openspec/`（新应用能力为 `agent-bridge-app`）。
 
 **当前已实现**：设备 UUID 自动生成与持久化、本机默认短名设置、启动信息面板
-（应用版本 / UUID / 短名 / 操作系统 / 区域语言 / 时间 / CPU / 内存 / 局域网 IP）。
+（应用版本 / UUID / 短名 / 操作系统 / 区域语言 / 时间 / CPU / 内存 / 局域网 IP / 服务端状态）、
+本机服务端（hello / exec / download、双 token 认证、请求留痕）与 `agent-bridge` 命令行。
+
+**客户端命令行**（`app/rust` 构建后得到 `agent-bridge` 二进制；安装器与 PATH 注册属后续变更）：
+
+```bash
+agent-bridge peers                          # 列出配置中的设备（含短名冲突标记）
+agent-bridge hello dev-a                    # 校验并打印设备信息（短名或 UUID 指代设备）
+agent-bridge exec dev-a "git -C ~/proj pull" --timeout 300   # 远端退出码即本命令退出码
+agent-bridge download dev-a build/app.tar.gz --out ./app.tar.gz
+agent-bridge token show                     # 显示本机长期 token
+agent-bridge token reset                    # 重置本机长期 token（旧值立即失效）
+```
+
+设备以「短名或 UUID」指代：短名不区分大小写且必须唯一——同一短名对应多台设备时，冲突各方的
+短名全部无效，需改名解除冲突或改用 UUID。退出码沿用 Python 版约定：0 成功（exec 时为远端
+退出码）／1 业务失败／2 配置或用法错误／3 网络失败／4 token 被拒。
+
+**协议与凭据要点**：服务端监听 37777，端点 `POST /hello`、`POST /exec`（NDJSON 流式）、
+`POST /download`（octet-stream）；认证接受两类 token——**会话 token**（每次启动轮换、仅存内存）
+与**长期 token**（持久化于配置文件、仅手动重置）。请求留痕写入数据目录 `server.log`
+（token 一律脱敏、exec 输出不落盘、1 MiB 轮转）。设备配置（`config.toml` 的 `[[peer]]` 段）
+当前手工维护；图形化配对与「复制配置到剪贴板」属后续变更。
 
 **构建前提**（开发机上）：Flutter stable、Rust stable、flutter_rust_bridge_codegen（版本组合以
 本仓库验证过的为准），以及系统构建依赖（Linux：GTK3 开发库、clang、cmake、ninja）。中国大陆
