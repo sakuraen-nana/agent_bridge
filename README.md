@@ -236,6 +236,23 @@ flutter build linux            # 产物：build/linux/x64/release/bundle/
 cargo build --manifest-path rust/Cargo.toml    # 仅 Rust 核心
 ```
 
+**构建安装包（分发）**——Linux 上以标准库脚本一条命令产出（产物在 `app/dist/`，含 `SHA256SUMS`）：
+
+```bash
+python3 app/packaging/build-linux.py
+```
+
+| 产物 | 用途 |
+| --- | --- |
+| `agent-bridge_<版本>_amd64.deb` | 安装包：应用 + `agent-bridge` 命令直接进 PATH + 桌面入口（`dpkg -i` 安装、`dpkg -r` 卸载） |
+| `agent-bridge-<版本>-x86_64.AppImage` | 自包含单文件：直接运行为 GUI；以 CLI 子命令为首参（如 `./agent-bridge-*.AppImage hello <设备>`）时执行内嵌 CLI |
+| `agent-bridge-<版本>-linux-x86_64.tar.gz` | 便携包：解压即用；`./install.sh` 把 CLI 软链到 `~/.local/bin` |
+
+- AppImage 构建需要 `appimagetool`（脚本找不到时会明确报错并说明获取方式，deb 与 tar.gz 仍照常产出）；运行 AppImage 需要 FUSE2，或用 `--appimage-extract-and-run` 免 FUSE。
+- 构建基线为目标机工具链对应的较新发行版（glibc 版本较新）；更老的发行版建议在目标环境自行构建。
+- **Windows**：在 Windows 上运行 `app/packaging/windows/build.ps1`（需 Flutter / Rust / Inno Setup 6）生成安装器；安装时把安装目录加入**用户级 PATH**，卸载自动恢复原值。本仓库不存放预编译产物。
+- 安装任一产物后，shell（bash / cmd）中即可直接使用 `agent-bridge` 客户端命令——与图形界面共用同一数据目录与配置。
+
 **数据目录**（首次启动自动创建）：Linux `~/.config/agent-bridge/`（或 `$XDG_CONFIG_HOME`），
 Windows `%APPDATA%\agent-bridge\`；其中 `config.toml` 保存设备 UUID 与本机短名，仅当前用户
 可读写（Linux 上文件 0600、目录 0700）。
