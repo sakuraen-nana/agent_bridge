@@ -157,8 +157,9 @@ scan 结果分两组输出："已确认的 bridge 服务器"（token 验证通�
 `openspec/`（新应用能力为 `agent-bridge-app`）。
 
 **当前已实现**：设备 UUID 自动生成与持久化、本机默认短名设置、启动信息面板
-（应用版本 / UUID / 短名 / 操作系统 / 区域语言 / 时间 / CPU / 内存 / 局域网 IP / 服务端状态）、
-本机服务端（hello / exec / download、双 token 认证、请求留痕）与 `agent-bridge` 命令行。
+（应用版本 / UUID / 短名 / 操作系统 / 区域语言 / 时间 / CPU / 内存 / 局域网 IP / 服务端 /
+管理员权限 / 防火墙状态）、本机服务端（hello / exec / download、双 token 认证、请求留痕）、
+`agent-bridge` 命令行、管理员权限请求与防火墙自动放行、托盘常驻与开机自启、配置片段复制。
 
 **客户端命令行**（`app/rust` 构建后得到 `agent-bridge` 二进制；安装器与 PATH 注册属后续变更）：
 
@@ -178,8 +179,27 @@ agent-bridge token reset                    # 重置本机长期 token（旧值�
 **协议与凭据要点**：服务端监听 37777，端点 `POST /hello`、`POST /exec`（NDJSON 流式）、
 `POST /download`（octet-stream）；认证接受两类 token——**会话 token**（每次启动轮换、仅存内存）
 与**长期 token**（持久化于配置文件、仅手动重置）。请求留痕写入数据目录 `server.log`
-（token 一律脱敏、exec 输出不落盘、1 MiB 轮转）。设备配置（`config.toml` 的 `[[peer]]` 段）
-当前手工维护；图形化配对与「复制配置到剪贴板」属后续变更。
+（token 一律脱敏、exec 输出不落盘、1 MiB 轮转）。图形化配对属后续变更。
+
+**权限、防火墙与常驻形态**：
+
+- **管理员权限**：启动即检测并在需要时请求（Linux 图形会话经 `pkexec` 重启自身；Windows 以
+  执行清单触发 UAC）。提权不可得（无图形会话、无 pkexec、或用户取消）时不退出：界面以红色
+  横幅明示「受限模式」，防火墙放行标记为未执行，其余功能可用。数据目录始终落在**调用者
+  用户**目录（提权路径显式传递 XDG 配置根；`sudo` 启动按 `SUDO_USER`/`PKEXEC_UID` 解析），
+  不会写进 root 用户目录。
+- **防火墙**：启动后检测 ufw / firewalld（Windows：Defender）并**幂等**放行实际服务端口
+  （TCP）；只增/查本工具自己的规则，不改动其它防火墙配置；未检测到受支持的管理器（如仅裸
+  nftables/iptables）时如实报告并提示手动放行。
+- **托盘与开机自启**：托盘可用时关闭窗口隐藏到系统托盘（菜单：显示窗口 / 复制本机配置 /
+  退出）；托盘不可用（如无 StatusNotifier host）降级为关窗即退出并在界面提示，不形成没有
+  可见入口的幽灵进程。开机自启默认关闭、可在界面开关（Linux 写 `~/.config/autostart`；
+  Windows 写 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`）。
+- **复制本机配置**：生成含**本次会话短期 token** 的 `[[peer]]` 片段到系统剪贴板（自动选择
+  非虚拟网桥的局域网地址），直接粘贴进对端 `config.toml` 即可；本应用重启后该 token 失效
+  （需要长期凭据请使用 `agent-bridge token show` 或等待配对功能）。
+- **已知限制**：Linux 以 root 运行图形界面在部分 Wayland 会话可能有兼容问题（X11 与主流
+  发行版正常）；裸 nftables/iptables 的自管规则不接管，按界面提示手动放行。
 
 **构建前提**（开发机上）：Flutter stable、Rust stable、flutter_rust_bridge_codegen（版本组合以
 本仓库验证过的为准），以及系统构建依赖（Linux：GTK3 开发库、clang、cmake、ninja）。中国大陆
