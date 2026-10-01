@@ -7,6 +7,7 @@ import '../frb_generated.dart';
 import '../sysinfo_view.dart';
 import 'init.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'pair.dart';
 
 /// 设置（`Some`）或清空（`None`）本机短名；返回刷新后的完整快照。
 ///

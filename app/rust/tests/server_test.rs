@@ -19,21 +19,27 @@ struct Harness {
     port: u16,
     session_token: String,
     long_term_token: String,
+    uuid: String,
 }
 
 impl Harness {
     fn start() -> Self {
+        Self::start_with_pair_timeout(pairing_default_timeout())
+    }
+
+    fn start_with_pair_timeout(pair_timeout_secs: u64) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let dir_path = dir.path().to_path_buf();
         let outcome = config::load_or_create(&dir_path).unwrap();
         let session_token = "s".repeat(64);
-        let handle = server::start(ServerConfig::new(
+        let mut server_config = ServerConfig::new(
             0,
             dir_path.clone(),
             session_token.clone(),
             Some(dir_path.to_string_lossy().into_owned()),
-        ))
-        .unwrap();
+        );
+        server_config.pair_timeout_secs = pair_timeout_secs;
+        let handle = server::start(server_config).unwrap();
         let port = handle.port();
         Self {
             _dir: dir,
@@ -42,6 +48,7 @@ impl Harness {
             port,
             session_token,
             long_term_token: outcome.device.long_term_token,
+            uuid: outcome.device.uuid,
         }
     }
 
@@ -436,6 +443,121 @@ fn session_token_rotates_across_restart() {
         assert_eq!(long.status(), 200, "长期 token 应跨重启有效");
     });
     second.stop();
+}
+
+/// 默认配对超时（与实现常量一致；避免测试直接引用内部常量）。
+fn pairing_default_timeout() -> u64 {
+    120
+}
+
+fn spawn_pair_request(
+    port: u16,
+    uuid: &'static str,
+) -> std::thread::JoinHandle<serde_json::Value> {
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            reqwest::Client::new()
+                .post(format!("http://127.0.0.1:{port}/pair/request"))
+                .json(&json!({"uuid": uuid, "short_name": "requester", "port": 37777}))
+                .send()
+                .await
+                .unwrap()
+                .json::<serde_json::Value>()
+                .await
+                .unwrap()
+        })
+    })
+}
+
+fn wait_pending(state: &std::sync::Arc<agent_bridge::server::ServerState>) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while agent_bridge::pairing::pending_info(state).is_none() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "配对请求应在 5 秒内进入待决表"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[test]
+fn pair_request_approve_returns_config_with_long_term_token() {
+    let h = Harness::start();
+    let state = h.handle.as_ref().unwrap().state();
+    let requester = spawn_pair_request(h.port, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
+    wait_pending(&state);
+
+    let pending = agent_bridge::pairing::pending_info(&state).unwrap();
+    assert_eq!(pending.uuid, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
+    assert_eq!(pending.short_name.as_deref(), Some("requester"));
+    assert!(pending.source_ip.starts_with("127.0.0.1"));
+
+    agent_bridge::pairing::decide(&state, true).unwrap();
+    let value = requester.join().unwrap();
+    assert_eq!(value["approved"], true);
+    assert_eq!(value["config"]["uuid"], h.uuid);
+    assert_eq!(value["config"]["token"], h.long_term_token);
+    assert!(agent_bridge::pairing::pending_info(&state).is_none(), "决定后应清表");
+    h.stop();
+}
+
+#[test]
+fn pair_request_reject_and_busy_and_bad_uuid() {
+    let h = Harness::start();
+    let state = h.handle.as_ref().unwrap().state();
+    let rt = client_runtime();
+
+    // 非法 uuid → 400
+    rt.block_on(async {
+        let resp = reqwest::Client::new()
+            .post(format!("http://127.0.0.1:{}/pair/request", h.port))
+            .json(&json!({"uuid": "not-a-uuid", "port": 37777}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 400);
+    });
+
+    // 第一条挂起 → 第二条忙
+    let first = spawn_pair_request(h.port, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
+    wait_pending(&state);
+    rt.block_on(async {
+        let resp = reqwest::Client::new()
+            .post(format!("http://127.0.0.1:{}/pair/request", h.port))
+            .json(&json!({"uuid": "ffffffff-ffff-4fff-8fff-ffffffffffff", "port": 37777}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 429);
+        let value: serde_json::Value = resp.json().await.unwrap();
+        assert!(value["error"].as_str().unwrap().contains("已有待处理"));
+    });
+
+    // 拒绝第一条
+    agent_bridge::pairing::decide(&state, false).unwrap();
+    let value = first.join().unwrap();
+    assert_eq!(value["approved"], false);
+    assert_eq!(value["reason"], "被拒绝");
+    assert!(agent_bridge::pairing::pending_info(&state).is_none());
+    h.stop();
+}
+
+#[test]
+fn pair_request_timeout_reports_and_clears() {
+    let h = Harness::start_with_pair_timeout(1);
+    let state = h.handle.as_ref().unwrap().state();
+    let requester = spawn_pair_request(h.port, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
+    wait_pending(&state);
+    // 不做出决定：1 秒后由服务端超时收尾
+    let value = requester.join().unwrap();
+    assert_eq!(value["approved"], false);
+    assert!(
+        value["reason"].as_str().unwrap().contains("超时"),
+        "{value}"
+    );
+    assert!(agent_bridge::pairing::pending_info(&state).is_none(), "超时应清表");
+    h.stop();
 }
 
 #[test]

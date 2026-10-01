@@ -95,6 +95,22 @@ pub fn lan_ip_list() -> Vec<String> {
     interface_ipv4s().into_iter().map(|(_, addr)| addr).collect()
 }
 
+/// 非环回、非 link-local 的 IPv4（接口名，地址，前缀长度）；供定向广播计算。
+pub fn interface_ipv4s_with_prefix() -> Vec<(String, String, u8)> {
+    let networks = Networks::new_with_refreshed_list();
+    let mut out = Vec::new();
+    for (name, data) in &networks {
+        for ip_net in data.ip_networks() {
+            if let IpAddr::V4(v4) = ip_net.addr {
+                if !v4.is_loopback() && !v4.is_link_local() && !v4.is_unspecified() && !v4.is_broadcast() {
+                    out.push((name.clone(), v4.to_string(), ip_net.prefix));
+                }
+            }
+        }
+    }
+    out
+}
+
 /// 非环回、非 link-local 的 IPv4（接口名，地址）列表；接口名供虚拟接口排除。
 pub fn interface_ipv4s() -> Vec<(String, String)> {
     let networks = Networks::new_with_refreshed_list();

@@ -38,7 +38,7 @@ fn network_error(e: reqwest::Error) -> CliFailure {
 }
 
 /// 错误文案脱敏：抹掉 URL 中的 token 取值（reqwest 的 Display 会带上完整 URL）。
-fn sanitize(text: &str) -> String {
+pub(crate) fn sanitize(text: &str) -> String {
     let Some(start) = text.find("?token=") else {
         return text.to_string();
     };

@@ -3,6 +3,7 @@
 
 pub mod device;
 pub mod init;
+pub mod pair;
 
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {

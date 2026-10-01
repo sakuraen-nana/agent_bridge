@@ -22,6 +22,8 @@ pub struct ServerConfig {
     pub workdir: Option<String>,
     /// 日志轮转阈值（默认 1 MiB；测试可调小）。
     pub log_max_bytes: u64,
+    /// 配对请求等待上限（秒；默认 120，测试可调小）。
+    pub pair_timeout_secs: u64,
 }
 
 impl ServerConfig {
@@ -37,6 +39,7 @@ impl ServerConfig {
             session_token,
             workdir,
             log_max_bytes: 1024 * 1024,
+            pair_timeout_secs: crate::pairing::PAIRING_TIMEOUT_SECS,
         }
     }
 }
@@ -49,10 +52,19 @@ pub struct ServerState {
     pub session_token: String,
     pub workdir: PathBuf,
     pub started_at: String,
+    /// 配对请求等待上限（秒）。
+    pub pair_timeout_secs: u64,
     request_seq: AtomicU64,
+    pairing_seq: AtomicU64,
     log: Mutex<RequestLog>,
     long_term_cache: Mutex<LongTermCache>,
     device_cache: Mutex<DeviceCache>,
+    /// 发现功能的最近活跃设备表（design D1）。
+    pub discovery_table: Mutex<crate::discovery::DiscoveryTable>,
+    /// 发现功能的不可用原因（UDP 端口占用等；None 表示可用）。
+    pub discovery_error: Mutex<Option<String>>,
+    /// 当前待决的配对请求（单条；design D2）。
+    pub pairing: Mutex<Option<crate::pairing::Pending>>,
 }
 
 /// 长期 token 缓存：按配置文件 mtime 刷新（CLI 端重置可即时生效，无需重启服务）。
@@ -85,7 +97,9 @@ impl ServerState {
             started_at: chrono::Local::now()
                 .format("%Y-%m-%d %H:%M:%S %:z")
                 .to_string(),
+            pair_timeout_secs: config.pair_timeout_secs,
             request_seq: AtomicU64::new(0),
+            pairing_seq: AtomicU64::new(0),
             log: Mutex::new(log),
             long_term_cache: Mutex::new(LongTermCache {
                 mtime,
@@ -96,12 +110,20 @@ impl ServerState {
                 uuid: String::new(),
                 short_name: None,
             }),
+            discovery_table: Mutex::new(crate::discovery::DiscoveryTable::default()),
+            discovery_error: Mutex::new(None),
+            pairing: Mutex::new(None),
         })
     }
 
     /// 请求序号（1 起、递增；仅用于日志对照）。
     pub fn next_request_id(&self) -> u64 {
         self.request_seq.fetch_add(1, Ordering::Relaxed) + 1
+    }
+
+    /// 配对请求序号。
+    pub fn next_pairing_id(&self) -> u64 {
+        self.pairing_seq.fetch_add(1, Ordering::Relaxed) + 1
     }
 
     /// 当前长期 token（按配置 mtime 刷新缓存）。

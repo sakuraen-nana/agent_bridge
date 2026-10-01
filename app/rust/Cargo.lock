@@ -34,6 +34,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "socket2",
  "subtle",
  "sys-locale",
  "sysinfo",

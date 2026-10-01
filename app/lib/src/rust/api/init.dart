@@ -6,8 +6,9 @@
 import '../frb_generated.dart';
 import '../sysinfo_view.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'pair.dart';
 
-// These functions are ignored because they are not marked as `pub`: `app_runtime`, `decide_firewall`, `ensure_server`
+// These functions are ignored because they are not marked as `pub`: `app_runtime_ref`, `app_runtime`, `decide_firewall`, `discovery_snapshot`, `ensure_server`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AppRuntime`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 
@@ -72,6 +73,9 @@ class AppSnapshot {
   /// 防火墙状态。
   final FirewallSnapshot firewall;
 
+  /// 发现功能状态。
+  final DiscoverySnapshot discovery;
+
   const AppSnapshot({
     required this.version,
     required this.uuid,
@@ -81,6 +85,7 @@ class AppSnapshot {
     required this.server,
     required this.elevation,
     required this.firewall,
+    required this.discovery,
   });
 
   @override
@@ -92,7 +97,8 @@ class AppSnapshot {
       system.hashCode ^
       server.hashCode ^
       elevation.hashCode ^
-      firewall.hashCode;
+      firewall.hashCode ^
+      discovery.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -106,7 +112,8 @@ class AppSnapshot {
           system == other.system &&
           server == other.server &&
           elevation == other.elevation &&
-          firewall == other.firewall;
+          firewall == other.firewall &&
+          discovery == other.discovery;
 }
 
 /// 开机自启状态（桥接面结构）。

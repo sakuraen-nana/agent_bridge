@@ -85,12 +85,14 @@ pub struct AppSnapshot {
     pub elevation: ElevationSnapshot,
     /// 防火墙状态。
     pub firewall: FirewallSnapshot,
+    /// 发现功能状态。
+    pub discovery: crate::api::pair::DiscoverySnapshot,
 }
 
 /// 进程级运行上下文（会话 token 与服务端句柄）。
-struct AppRuntime {
-    session_token: String,
-    server: Mutex<Option<ServerHandle>>,
+pub(crate) struct AppRuntime {
+    pub(crate) session_token: String,
+    pub(crate) server: Mutex<Option<ServerHandle>>,
 }
 
 static APP_RUNTIME: OnceLock<AppRuntime> = OnceLock::new();
@@ -100,6 +102,11 @@ fn app_runtime() -> &'static AppRuntime {
         session_token: identity::new_token(),
         server: Mutex::new(None),
     })
+}
+
+/// 供 api 其他模块（pair 等）访问进程级上下文。
+pub(crate) fn app_runtime_ref() -> &'static AppRuntime {
+    app_runtime()
 }
 
 /// 确保服务端已启动（幂等；同一进程只启动一个实例）。
@@ -154,8 +161,13 @@ pub async fn app_init() -> anyhow::Result<AppSnapshot> {
     let data_dir = config::resolve_data_dir()?;
     let outcome = config::load_or_create(&data_dir)?;
     let server = ensure_server(&data_dir, outcome.device.workdir.clone());
+    let discovery = discovery_snapshot();
 
-    let firewall_report = decide_firewall(&server, elevation_status.admin).await;
+    // 发现可用时一并放行 UDP 发现端口
+    let udp_discovery_port = discovery
+        .available
+        .then_some(crate::discovery::DISCOVERY_PORT);
+    let firewall_report = decide_firewall(&server, elevation_status.admin, udp_discovery_port).await;
 
     Ok(AppSnapshot {
         version: version::APP_VERSION.to_string(),
@@ -174,19 +186,50 @@ pub async fn app_init() -> anyhow::Result<AppSnapshot> {
             applied: firewall_report.applied,
             detail: firewall_report.detail,
         },
+        discovery,
     })
 }
 
-/// 防火墙步骤决策：服务端未运行或受限模式 → 如实跳过；否则探测并放行。
-async fn decide_firewall(server: &ServerSnapshot, admin: bool) -> FirewallReport {
+/// 发现功能状态快照（取服务端 state 中的 UDP 绑定结果）。
+fn discovery_snapshot() -> crate::api::pair::DiscoverySnapshot {
+    let runtime = app_runtime();
+    let guard = runtime.server.lock().unwrap();
+    match guard.as_ref() {
+        None => crate::api::pair::DiscoverySnapshot {
+            available: false,
+            detail: "服务端未运行".to_string(),
+        },
+        Some(handle) => {
+            let state = handle.state();
+            let error = state.discovery_error.lock().unwrap().clone();
+            match error {
+                Some(reason) => crate::api::pair::DiscoverySnapshot {
+                    available: false,
+                    detail: reason,
+                },
+                None => crate::api::pair::DiscoverySnapshot {
+                    available: true,
+                    detail: format!("信标监听中（UDP {}）", crate::discovery::DISCOVERY_PORT),
+                },
+            }
+        }
+    }
+}
+
+/// 防火墙步骤决策：服务端未运行或受限模式 → 如实跳过；否则探测并放行所需端口。
+async fn decide_firewall(
+    server: &ServerSnapshot,
+    admin: bool,
+    udp_discovery_port: Option<u16>,
+) -> FirewallReport {
     if !server.running {
-        return firewall::skipped("服务端未运行", server.port);
+        return firewall::skipped("服务端未运行", server.port, udp_discovery_port);
     }
     if !admin {
-        return firewall::skipped("受限模式（未获得管理员权限）", server.port);
+        return firewall::skipped("受限模式（未获得管理员权限）", server.port, udp_discovery_port);
     }
     let port = server.port;
-    tokio::task::spawn_blocking(move || firewall::ensure_system(port))
+    tokio::task::spawn_blocking(move || firewall::ensure_system(port, udp_discovery_port))
         .await
         .unwrap_or_else(|e| FirewallReport {
             manager: None,

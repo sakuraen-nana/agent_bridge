@@ -14,7 +14,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use toml_edit::{DocumentMut, Item, Table, value};
+use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 
 use crate::error::AppError;
 use crate::identity;
@@ -368,12 +368,26 @@ fn ensure_data_dir(dir: &Path) -> Result<(), AppError> {
     Ok(())
 }
 
+/// 进程内写入串行化与临时文件序号（并发首启/轮询修复写入的防撞）。
+static WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+static WRITE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// 原子写入：同目录临时文件（Unix 0600）→ `rename` 替换目标。
+///
+/// 进程内以全局锁串行化（同一进程的并发 load_or_create/修复写不会互抢临时文件），
+/// 临时文件名加入进程内序号（跨进程并发亦不撞名；rename 覆盖语义使「后写者胜」）。
 fn write_document(path: &Path, doc: &DocumentMut) -> Result<(), AppError> {
+    let _guard = WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let dir = path
         .parent()
         .ok_or_else(|| AppError::ConfigWrite("配置路径没有父目录".to_string()))?;
-    let tmp = dir.join(format!("{CONFIG_FILE_NAME}.tmp-{}", std::process::id()));
+    let seq = WRITE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = dir.join(format!(
+        "{CONFIG_FILE_NAME}.tmp-{}-{seq}",
+        std::process::id()
+    ));
 
     let mut opts = fs::OpenOptions::new();
     opts.write(true).create(true).truncate(true);
@@ -463,6 +477,49 @@ fn device_config_from_doc(doc: &DocumentMut, short_name: Option<String>) -> Devi
         long_term_token: device_long_term_token_from_doc(doc).unwrap_or_default(),
         workdir: device_workdir_from_doc(doc),
     }
+}
+
+/// 追加或（同 uuid）幂等覆盖一条 `[[peer]]` 条目（配对写入用）。
+pub fn add_peer(data_dir: &Path, peer: &Peer) -> Result<(), AppError> {
+    let (mut doc, _) = load_document(data_dir)?;
+    if doc.get("peer").and_then(Item::as_array_of_tables).is_none() {
+        doc["peer"] = Item::ArrayOfTables(ArrayOfTables::new());
+    }
+    let aot = doc["peer"]
+        .as_array_of_tables_mut()
+        .ok_or_else(|| AppError::ConfigWrite("peer 段形态非法".to_string()))?;
+
+    let mut replaced = false;
+    for index in 0..aot.len() {
+        let table = aot
+            .get_mut(index)
+            .ok_or_else(|| AppError::ConfigWrite("peer 条目缺失".to_string()))?;
+        if table.get("uuid").and_then(|v| v.as_str()) == Some(peer.uuid.as_str()) {
+            match &peer.short_name {
+                Some(name) => table["short_name"] = value(name.as_str()),
+                None => {
+                    table.remove("short_name");
+                }
+            }
+            table["address"] = value(peer.address.as_str());
+            table["port"] = value(i64::from(peer.port));
+            table["token"] = value(peer.token.as_str());
+            replaced = true;
+            break;
+        }
+    }
+    if !replaced {
+        let mut table = Table::new();
+        table["uuid"] = value(peer.uuid.as_str());
+        if let Some(name) = &peer.short_name {
+            table["short_name"] = value(name.as_str());
+        }
+        table["address"] = value(peer.address.as_str());
+        table["port"] = value(i64::from(peer.port));
+        table["token"] = value(peer.token.as_str());
+        aot.push(table);
+    }
+    write_document(&data_dir.join(CONFIG_FILE_NAME), &doc)
 }
 
 /// 从文档解析 `[[peer]]` 多段；缺 uuid/address 或 uuid 非法的条目跳过（不改写文件）。

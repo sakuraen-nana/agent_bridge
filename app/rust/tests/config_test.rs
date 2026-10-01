@@ -296,6 +296,87 @@ fn data_dir_ctx_prefers_xdg_then_caller_home_then_home() {
 }
 
 #[test]
+fn add_peer_appends_then_updates_idempotently() {
+    use agent_bridge::config::Peer;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let _ = config::load_or_create(tmp.path()).unwrap();
+    let path = tmp.path().join(CONFIG_FILE_NAME);
+    // 预置注释，验证写入不吞注释
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(&path, format!("# 顶部注释\n{text}")).unwrap();
+
+    let first = Peer {
+        uuid: VALID_UUID.to_string(),
+        short_name: Some("dev-a".to_string()),
+        address: "10.0.0.5".to_string(),
+        port: 37777,
+        token: "t1".to_string(),
+    };
+    config::add_peer(tmp.path(), &first).unwrap();
+    let outcome = config::load_or_create(tmp.path()).unwrap();
+    assert_eq!(outcome.peers.len(), 1);
+    assert_eq!(outcome.peers[0].short_name.as_deref(), Some("dev-a"));
+
+    // 幂等覆盖（同 uuid、去短名、换址换 token）
+    let updated = Peer {
+        uuid: VALID_UUID.to_string(),
+        short_name: None,
+        address: "10.0.0.6".to_string(),
+        port: 40001,
+        token: "t2".to_string(),
+    };
+    config::add_peer(tmp.path(), &updated).unwrap();
+    let outcome = config::load_or_create(tmp.path()).unwrap();
+    assert_eq!(outcome.peers.len(), 1, "同 uuid 不得重复添加");
+    assert_eq!(outcome.peers[0].address, "10.0.0.6");
+    assert_eq!(outcome.peers[0].port, 40001);
+    assert_eq!(outcome.peers[0].token, "t2");
+    assert!(outcome.peers[0].short_name.is_none());
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.contains("# 顶部注释"), "注释应保留");
+    assert!(!text.contains("dev-a"), "短名移除后不应残留");
+
+    // 追加第二台
+    let second = Peer {
+        uuid: VALID_UUID_2.to_string(),
+        short_name: Some("dev-b".to_string()),
+        address: "10.0.0.7".to_string(),
+        port: 37777,
+        token: "t3".to_string(),
+    };
+    config::add_peer(tmp.path(), &second).unwrap();
+    assert_eq!(config::load_or_create(tmp.path()).unwrap().peers.len(), 2);
+}
+
+#[test]
+fn concurrent_first_loads_do_not_collide() {
+    // 复现并锁定修复：三个线程对「尚不存在」的配置并发 load_or_create
+    // （曾因临时文件名仅含 pid 而互抢 rename 报 ENOENT；见变更 ④ 实跑发现）
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().to_path_buf();
+    let handles: Vec<_> = (0..3)
+        .map(|_| {
+            let dir = dir.clone();
+            std::thread::spawn(move || config::load_or_create(&dir).map(|o| o.device.uuid))
+        })
+        .collect();
+    for handle in handles {
+        let uuid = handle.join().unwrap().expect("并发首启不应失败");
+        assert!(uuid::Uuid::parse_str(&uuid).is_ok());
+    }
+    let final_uuid = config::load_or_create(&dir).unwrap().device.uuid;
+    assert!(uuid::Uuid::parse_str(&final_uuid).is_ok());
+    // 无临时文件残留
+    let leftovers = fs::read_dir(&dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().contains(".tmp-"))
+        .count();
+    assert_eq!(leftovers, 0, "不应残留临时文件");
+}
+
+#[test]
 fn reset_long_term_token_persists_new_value() {
     let tmp = tempfile::tempdir().unwrap();
     let old = config::load_or_create(tmp.path()).unwrap().device.long_term_token;

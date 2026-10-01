@@ -5,6 +5,7 @@
 
 import 'api/device.dart';
 import 'api/init.dart';
+import 'api/pair.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
@@ -36,6 +37,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  PendingPairingInfo dco_decode_box_autoadd_pending_pairing_info(dynamic raw);
+
+  @protected
+  DiscoveredDeviceInfo dco_decode_discovered_device_info(dynamic raw);
+
+  @protected
+  DiscoverySnapshot dco_decode_discovery_snapshot(dynamic raw);
+
+  @protected
   ElevationSnapshot dco_decode_elevation_snapshot(dynamic raw);
 
   @protected
@@ -45,6 +55,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
+  List<DiscoveredDeviceInfo> dco_decode_list_discovered_device_info(
+    dynamic raw,
+  );
+
+  @protected
+  List<PeerStatusInfo> dco_decode_list_peer_status_info(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
@@ -52,6 +70,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  PendingPairingInfo? dco_decode_opt_box_autoadd_pending_pairing_info(
+    dynamic raw,
+  );
+
+  @protected
+  PairOutcomeInfo dco_decode_pair_outcome_info(dynamic raw);
+
+  @protected
+  PeerStatusInfo dco_decode_peer_status_info(dynamic raw);
+
+  @protected
+  PendingPairingInfo dco_decode_pending_pairing_info(dynamic raw);
 
   @protected
   (String, String) dco_decode_record_string_string(dynamic raw);
@@ -64,6 +96,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int dco_decode_u_16(dynamic raw);
+
+  @protected
+  BigInt dco_decode_u_64(dynamic raw);
 
   @protected
   int dco_decode_u_8(dynamic raw);
@@ -87,6 +122,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  PendingPairingInfo sse_decode_box_autoadd_pending_pairing_info(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  DiscoveredDeviceInfo sse_decode_discovered_device_info(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  DiscoverySnapshot sse_decode_discovery_snapshot(SseDeserializer deserializer);
+
+  @protected
   ElevationSnapshot sse_decode_elevation_snapshot(SseDeserializer deserializer);
 
   @protected
@@ -94,6 +142,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<DiscoveredDeviceInfo> sse_decode_list_discovered_device_info(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<PeerStatusInfo> sse_decode_list_peer_status_info(
+    SseDeserializer deserializer,
+  );
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
@@ -105,6 +163,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  PendingPairingInfo? sse_decode_opt_box_autoadd_pending_pairing_info(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PairOutcomeInfo sse_decode_pair_outcome_info(SseDeserializer deserializer);
+
+  @protected
+  PeerStatusInfo sse_decode_peer_status_info(SseDeserializer deserializer);
+
+  @protected
+  PendingPairingInfo sse_decode_pending_pairing_info(
+    SseDeserializer deserializer,
+  );
 
   @protected
   (String, String) sse_decode_record_string_string(
@@ -119,6 +193,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
+
+  @protected
+  BigInt sse_decode_u_64(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_8(SseDeserializer deserializer);
@@ -148,6 +225,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_pending_pairing_info(
+    PendingPairingInfo self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_discovered_device_info(
+    DiscoveredDeviceInfo self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_discovery_snapshot(
+    DiscoverySnapshot self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_elevation_snapshot(
     ElevationSnapshot self,
     SseSerializer serializer,
@@ -163,6 +258,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_discovered_device_info(
+    List<DiscoveredDeviceInfo> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_peer_status_info(
+    List<PeerStatusInfo> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
@@ -176,6 +283,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_pending_pairing_info(
+    PendingPairingInfo? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_pair_outcome_info(
+    PairOutcomeInfo self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_peer_status_info(
+    PeerStatusInfo self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_pending_pairing_info(
+    PendingPairingInfo self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_record_string_string(
@@ -197,6 +328,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_64(BigInt self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_8(int self, SseSerializer serializer);
