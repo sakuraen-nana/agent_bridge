@@ -21,7 +21,7 @@
 
 - [x] 3.1 新增 `lib/src/window_geometry.dart`：`kDefaultStartupWindowSize = Size(480, 960)`、`kMinimumWindowSize = Size(360, 720)`、`startupWindowSize(Size visible)`（高取 min(960, 可用高)；宽度不足时按宽再缩；恒 1:2）。验证：`test/window_geometry_test.dart`（1920×1080 → 480×960；小屏按可用高缩；极窄屏按宽再缩；恰为默认；各分支宽:高 = 1:2）全过 —— 证据：5 项用例全过（All tests passed）
 - [x] 3.2 `pubspec.yaml` 增 `screen_retriever: ^0.2.2` 直接依赖；验证：`flutter pub get` 成功且 `pubspec.lock` 中该包版本不变（0.2.2，原为传递依赖） —— 证据：锁文件仅 `screen_retriever` 一处 `transitive` → `direct main`（1 行），版本 0.2.2 与镜像 URL 不变（以 `PUB_HOSTED_URL=https://pub.flutter-io.cn` 执行）
-- [ ] 3.3 `main.dart`：`WindowOptions` 改用 `startupWindowSize(visibleSize ?? size)`（`getPrimaryDisplay()` 读取失败回退默认 480×960）、`minimumSize: kMinimumWindowSize`；验证：`flutter analyze && flutter test` 通过；行为由 4.1/4.3 断言
+- [x] 3.3 `main.dart`：`WindowOptions` 改用 `startupWindowSize(visibleSize ?? size)`（`getPrimaryDisplay()` 读取失败回退默认 480×960）、`minimumSize: kMinimumWindowSize`；验证：`flutter analyze && flutter test` 通过；行为由 4.1/4.3 断言 —— 证据：`flutter analyze` 无问题、`flutter test` 23 项全过；实跑断见 4.1（集成 Size(480,960)）与 4.3（xdotool 480x960）
 
 ## 4. 测试与实跑（Linux）
 
@@ -39,7 +39,7 @@
 - [x] 6.2 分提交推送（Rust 补全 / 生成物与接线 / 窗口尺寸 / 文档与证据各自成提交）；验证：`git status` 干净、与远端一致 —— 证据：4 个提交 `0b02a44`（Rust 核心与桥接函数）/ `8123b21`（生成物与接线）/ `3f97ce3`（窗口尺寸）/ `32b20be`（文档与证据）已推送；`git status` 干净、`main...origin/main` 同步
 - [x] 6.3 证据登记：勾选附证据；未实跑不勾选 —— 证据：本文件各勾选项均附命令输出/几何数据/截图要点；§7 待用户验收与 §8 跟进项如实保留未勾选
 - [x] 6.4 归档前版本推进：`app/rust/Cargo.toml` `0.5.0` → `0.6.0`；验证：面板「应用版本」与版本源一致（截图/输出留证）、提交推送 —— 证据：版本源 0.6.0（Cargo.lock 同步）；CLI `agent-bridge --version` → `agent-bridge 0.6.0`；重建 Linux 束实跑截图：面板「应用版本 0.6.0」、窗口仍 480×960（720,60 居中）、短名 hermes-machine
-- [ ] 6.5 `/opsx:archive` 归档；主规格核对（`openspec validate --strict --no-interactive` 通过、`openspec list` 无在途变更）
+- [x] 6.5 `/opsx:archive` 归档；主规格核对（`openspec validate --strict --no-interactive` 通过、`openspec list` 无在途变更） —— 证据：归档前 `validate --strict` 通过、`validate --specs` 2/2 通过；差异规格已同步至主规格（「本机默认短名」替换为自动初始化语义、「启动窗口尺寸」追加）；变更移入 `openspec/changes/archive/2026-10-02-add-startup-window-and-default-short-name/`；`openspec list` → 「No active changes found」
 
 ## 7. 待用户验收清单（需真机人工操作）
 
