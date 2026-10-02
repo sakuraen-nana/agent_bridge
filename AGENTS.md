@@ -11,8 +11,8 @@
 > **五个变更全部落地并归档**（基座与设备身份 → 服务端核心与 CLI → 权限/防火墙/托盘 →
 > 发现与配对 → 打包与安装器），路线图闭环；分发物为 Linux deb / AppImage / tar.gz 与
 > Windows Inno 安装器（脚本随仓库，构建在目标平台执行）。行为契约以 `openspec/specs/` 为准；
-> 已归档的变更见 `openspec/changes/archive/`，各自 `tasks.md` 末尾列有未实现的跟进项
-> （如需推进，逐项另立变更）。
+> 已归档的变更见 `openspec/changes/archive/`，各自 `tasks.md` 载有「待用户验收清单」（需真机
+> 人工操作）与末尾的「跟进项」；推进任一项时逐项另立变更。
 
 ## 仓库定位：独立通用工具
 
