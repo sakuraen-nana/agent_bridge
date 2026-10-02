@@ -4,12 +4,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:screen_retriever/screen_retriever.dart';
 import 'package:tray_manager/tray_manager.dart' as tray;
 import 'package:window_manager/window_manager.dart';
 
 import 'src/bridge_service.dart';
 import 'src/home_page.dart';
 import 'src/rust/frb_generated.dart';
+import 'src/window_geometry.dart';
 
 // 保持引用：托盘/菜单对象被 GC 会释放原生句柄（图标随之消失）。
 // 仅在 _setupTray 中赋值、以顶层变量形式存活到进程结束，故免疫 unused 提示。
@@ -55,9 +57,9 @@ Future<void> main() async {
   windowManager.addListener(_AppWindowListener(trayReady: trayReady));
 
   await windowManager.waitUntilReadyToShow(
-    const WindowOptions(
-      size: Size(1000, 720),
-      minimumSize: Size(760, 560),
+    WindowOptions(
+      size: await _startupWindowSize(),
+      minimumSize: kMinimumWindowSize,
       center: true,
       title: 'agent-bridge',
     ),
@@ -68,6 +70,18 @@ Future<void> main() async {
   );
 
   runApp(AgentBridgeApp(service: RustBridgeService(), trayReady: trayReady));
+}
+
+/// 启动窗口尺寸：宽:高 = 1:2 竖向窄窗（默认 480×960）；屏幕可用区域放不下时
+/// 等比缩小（仍 1:2）。屏幕信息读取失败时回退默认尺寸、不阻断启动（design D3）。
+Future<Size> _startupWindowSize() async {
+  try {
+    final display = await screenRetriever.getPrimaryDisplay();
+    return startupWindowSize(display.visibleSize ?? display.size);
+  } catch (error) {
+    debugPrint('屏幕可用区域读取失败，按默认尺寸启动：$error');
+    return kDefaultStartupWindowSize;
+  }
 }
 
 /// 建立系统托盘（菜单：显示窗口 / 复制本机配置 / 退出）；失败返回 false。

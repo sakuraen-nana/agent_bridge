@@ -39,6 +39,8 @@ dependencies:
   flutter_rust_bridge: 2.11.1
   tray_manager: ^0.6.1
   window_manager: ^0.5.2
+  # 屏幕可用区域（启动窗口 1:2 竖向尺寸按屏幕等比缩小时读取；原为传递依赖）
+  screen_retriever: ^0.2.2
 
 dev_dependencies:
   flutter_test:
