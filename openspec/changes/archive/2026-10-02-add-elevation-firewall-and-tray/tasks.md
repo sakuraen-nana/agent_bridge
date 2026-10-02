@@ -11,7 +11,7 @@
 
 - [x] 1.1 `is_elevated` 依赖引入（或自实现两端检测）+ `elevation.rs`：状态判定（AlreadyAdmin / 可重启 / Restricted{原因}）；验证：单测——root 直通（本机即 root）、无图形会话为非 root 时报 Restricted（setpriv 模拟）、pkexec 缺失时报 Restricted —— 证据：提交 `357f8e5`；**实施修正**：`is_elevated` crate 实为 Windows-only（`#![cfg(windows)]`），Unix 侧以 `libc::geteuid()==0` 自检（`elevation::is_admin`）；单测 `ensure_as_root_continues_with_admin`（root 直通）通过；「pkexec 缺失 → 受限」在 §7 真机复现（PATH 剥离，截图）；「无图形会话报受限」为纯决策分支（build_relaunch_plan 前置判据）由实现路径保证，未单测——如实说明
 - [x] 1.2 pkexec 重启命令构造（显式 env 白名单，含 `XDG_CONFIG_HOME=<调用者 .config>`）与「等待 → 失败进受限模式 / 成功退出本实例」；验证：单测锁定命令与环境；真机路径见 §7（本机 root 直达）—— 证据：单测 `relaunch_plan_carries_whitelisted_env_and_caller_config_home`（白名单含 DISPLAY/XAUTHORITY/XDG_CONFIG_HOME、排除白名单外变量、末位为本可执行文件）与 `relaunch_plan_requires_config_home`；成功重启路径（pkexec 弹窗）列 §8 验收
-- [x] 1.3 `config.rs` 数据目录按调用者：`SUDO_USER`/`PKEXEC_UID` → /etc/passwd 家目录 → `<home>/.config`；验证：单测（注入 env）覆盖 SUDO_USER / PKEXEC_UID / 用户不存在回退 —— 证据：`config_test.rs` 新增 2 项：`caller_home_from_sudo_user_then_pkexec_uid`（五分支）与 `data_dir_ctx_prefers_xdg_then_caller_home_then_home`（优先级）；真机：`SUDO_USER=sdk` 启动 → 配置落在 `/home/sdk/.config/agent-bridge/`（140 字节，实测后已清理）
+- [x] 1.3 `config.rs` 数据目录按调用者：`SUDO_USER`/`PKEXEC_UID` → /etc/passwd 家目录 → `<home>/.config`；验证：单测（注入 env）覆盖 SUDO_USER / PKEXEC_UID / 用户不存在回退 —— 证据：`config_test.rs` 新增 2 项：`caller_home_from_sudo_user_then_pkexec_uid`（五分支）与 `data_dir_ctx_prefers_xdg_then_caller_home_then_home`（优先级）；真机：`SUDO_USER=<某非 root 用户>` 启动 → 配置落在 `<该用户家目录>/.config/agent-bridge/`（140 字节，实测后已清理）
 - [x] 1.4 `AppSnapshot.elevation` 入快照 + 受限模式横幅（错误色）；验证：widget 测试新用例 + codegen 重跑 —— 证据：提交 `357f8e5`；widget 用例「展示管理员权限与防火墙状态行」（横幅+行共 2 处含「受限模式」）；真机截图：受限实例红色横幅「受限模式：系统未提供 pkexec，无法发起提权请求」
 
 ## 2. 防火墙
@@ -45,7 +45,7 @@
 
 ## 7. Linux 实跑验证（本机）
 
-- [x] 7.1 提权路径实跑：本机以 root 启动 → 面板「管理员权限：已具备」；以 `setpriv nobody` 且无 DISPLAY 启动 → 受限模式横幅（截图）且服务端仍运行；`SUDO_USER=<某用户> sudo` 语义核对（解析单测 + 真机以环境变量模拟核对数据目录落点）—— 证据：root 实例面板「管理员权限 已具备（root/管理员）」（截图）；受限实例（nobody + 图形会话 + PATH 剥离 pkexec）红色横幅「受限模式：系统未提供 pkexec，无法发起提权请求」且「服务端 运行中（端口 39422）」（截图）；数据目录落点：`SUDO_USER=sdk` → `/home/sdk/.config/agent-bridge/config.toml` 生成（实测）
+- [x] 7.1 提权路径实跑：本机以 root 启动 → 面板「管理员权限：已具备」；以 `setpriv nobody` 且无 DISPLAY 启动 → 受限模式横幅（截图）且服务端仍运行；`SUDO_USER=<某用户> sudo` 语义核对（解析单测 + 真机以环境变量模拟核对数据目录落点）—— 证据：root 实例面板「管理员权限 已具备（root/管理员）」（截图）；受限实例（nobody + 图形会话 + PATH 剥离 pkexec）红色横幅「受限模式：系统未提供 pkexec，无法发起提权请求」且「服务端 运行中（端口 39422）」（截图）；数据目录落点：`SUDO_USER=<某非 root 用户>` → `<该用户家目录>/.config/agent-bridge/config.toml` 生成（实测）
 - [x] 7.2 防火墙实跑：本机 ufw 未激活 → 面板「未激活、无需放行」；模拟 Unsupported（临时 PATH 排除 ufw/firewall-cmd）→「需手动放行」提示；截图/输出留证 —— 证据：ufw 未激活实例（截图，见 7.1 root 实例）与 PATH 剥离实例（截图：「未检测到受支持的活跃防火墙（ufw/firewalld）；如有自管规则请手动放行 39423/tcp」）
 - [x] 7.3 托盘降级实跑：Xvfb（无 StatusNotifier host）→ 提示托盘不可用、关窗即退出（行为与升级前一致）；截图留证 —— 证据：实例日志「托盘宿主不可用（无 StatusNotifierWatcher），关闭窗口将退出」+ 界面 notice「托盘不可用：关闭窗口将退出应用」（截图）；降级语义=关窗走 `destroy()`（与升级前一致）
 - [x] 7.4 开机自启实跑：开关开启 → `~/.config/autostart/agent-bridge.desktop` 生成（内容含提权启动命令）；再关闭 → 删除；重复开启两次仍仅一份；留证 —— 证据：集成测试「开机自启开关写删机制文件」以真实文件系统验证（见 4.2）；**更正**：desktop 内容为 Exec 指向应用（提权由应用启动逻辑自理），非拼装提权命令——规划产物已同步修订

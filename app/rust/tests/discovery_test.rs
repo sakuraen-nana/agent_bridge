@@ -99,10 +99,10 @@ fn broadcast_targets_skip_virtual_interfaces() {
     let interfaces = vec![
         ("docker0".to_string(), "172.17.0.1".to_string(), 16u8),
         ("br-a1b2".to_string(), "172.18.0.1".to_string(), 16),
-        ("ens33".to_string(), "192.168.31.213".to_string(), 24),
+        ("ens33".to_string(), "192.168.1.213".to_string(), 24),
     ];
     let targets = broadcast_targets(&interfaces);
     assert!(targets.contains(&Ipv4Addr::BROADCAST));
-    assert!(targets.contains(&Ipv4Addr::new(192, 168, 31, 255)));
+    assert!(targets.contains(&Ipv4Addr::new(192, 168, 1, 255)));
     assert!(!targets.iter().any(|t| t.octets()[0] == 172), "虚拟接口不应产生定向广播");
 }

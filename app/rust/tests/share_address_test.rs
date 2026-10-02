@@ -13,11 +13,11 @@ fn skips_virtual_interfaces_and_prefers_private() {
         pair("docker0", "172.17.0.1"),
         pair("br-a1b2", "172.18.0.1"),
         pair("ens33", "8.8.8.8"),
-        pair("ens33", "192.168.31.213"),
+        pair("ens33", "192.168.1.213"),
     ];
     assert_eq!(
         select_share_address(&candidates).as_deref(),
-        Some("192.168.31.213")
+        Some("192.168.1.213")
     );
 }
 
