@@ -230,6 +230,29 @@ pub fn set_short_name(data_dir: &Path, name: Option<&str>) -> Result<DeviceConfi
     Ok(device_config_from_doc(&doc, normalized))
 }
 
+/// 启动补全：本机短名为空（未设置、已清空或为空值）时以设备名初始化并持久化。
+///
+/// 设备名经短名规则校验：不合法（去空白后为空、超长、含空白/控制字符）时保持为空
+/// 并返回 `None`（MUST NOT 截断或替换字符）；已有非空短名原样返回、不写。
+/// 返回补全后生效的短名。仅由应用启动路径调用（design D1：不得并入 `load_or_create`，
+/// 否则服务端按 mtime 刷新与清空按钮的快照刷新都会触发填回）。
+pub fn ensure_default_short_name(
+    data_dir: &Path,
+    device_name: &str,
+) -> Result<Option<String>, AppError> {
+    let outcome = load_or_create(data_dir)?;
+    if let Some(existing) = outcome.device.short_name {
+        return Ok(Some(existing));
+    }
+    match identity::validate_short_name(device_name) {
+        Ok(name) => {
+            set_short_name(data_dir, Some(&name))?;
+            Ok(Some(name))
+        }
+        Err(_) => Ok(None),
+    }
+}
+
 /// 重置长期 token 并持久化（CLI `token reset`）；返回新值。
 pub fn reset_long_term_token(data_dir: &Path) -> Result<String, AppError> {
     let token = identity::new_token();

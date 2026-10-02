@@ -144,6 +144,10 @@ pub async fn request_pairing(uuid: String) -> anyhow::Result<PairOutcomeInfo> {
 }
 
 /// 配对请求核心（显式状态与数据目录，便于 Rust 级集成测试复用）。
+///
+/// `#[frb(ignore)]`：仅供 Rust 内部与集成测试调用，不暴露到桥接面
+/// （参数含服务端内部类型，GUI 无用途）。
+#[flutter_rust_bridge::frb(ignore)]
 pub async fn request_pairing_core(
     state: &crate::server::ServerState,
     data_dir: &std::path::Path,

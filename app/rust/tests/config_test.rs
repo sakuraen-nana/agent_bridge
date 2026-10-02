@@ -164,6 +164,88 @@ const VALID_UUID: &str = "00000000-0000-4000-8000-000000000000";
 const VALID_UUID_2: &str = "11111111-1111-4111-8111-111111111111";
 
 #[test]
+fn ensure_default_short_name_fills_from_device_name_and_persists() {
+    let tmp = tempfile::tempdir().unwrap();
+    let filled = config::ensure_default_short_name(tmp.path(), "my-machine").unwrap();
+    assert_eq!(filled.as_deref(), Some("my-machine"));
+
+    let outcome = config::load_or_create(tmp.path()).unwrap();
+    assert_eq!(outcome.device.short_name.as_deref(), Some("my-machine"));
+    let text = fs::read_to_string(tmp.path().join(CONFIG_FILE_NAME)).unwrap();
+    assert!(text.contains("my-machine"), "补全结果应写回文件");
+}
+
+#[test]
+fn ensure_default_short_name_trims_device_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let filled = config::ensure_default_short_name(tmp.path(), "  my-machine  ").unwrap();
+    assert_eq!(filled.as_deref(), Some("my-machine"), "应按短名规则去首尾空白");
+}
+
+#[test]
+fn ensure_default_short_name_keeps_existing_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    config::set_short_name(tmp.path(), Some("既有名")).unwrap();
+
+    let kept = config::ensure_default_short_name(tmp.path(), "other-machine").unwrap();
+    assert_eq!(kept.as_deref(), Some("既有名"));
+    let text = fs::read_to_string(tmp.path().join(CONFIG_FILE_NAME)).unwrap();
+    assert!(!text.contains("other-machine"), "不应覆盖已有非空短名");
+}
+
+#[test]
+fn ensure_default_short_name_invalid_device_name_keeps_empty() {
+    let tmp = tempfile::tempdir().unwrap();
+    assert!(
+        config::ensure_default_short_name(tmp.path(), "bad name")
+            .unwrap()
+            .is_none(),
+        "含空白的设备名应保持为空"
+    );
+    assert!(
+        config::ensure_default_short_name(tmp.path(), &"x".repeat(33))
+            .unwrap()
+            .is_none(),
+        "超长设备名应保持为空"
+    );
+    assert!(
+        config::ensure_default_short_name(tmp.path(), "   ")
+            .unwrap()
+            .is_none(),
+        "空白设备名应保持为空"
+    );
+    let text = fs::read_to_string(tmp.path().join(CONFIG_FILE_NAME)).unwrap();
+    assert!(!text.contains("short_name"), "非法设备名不应写入短名键");
+}
+
+#[test]
+fn ensure_default_short_name_refills_after_clear() {
+    let tmp = tempfile::tempdir().unwrap();
+    config::ensure_default_short_name(tmp.path(), "my-machine").unwrap();
+    config::set_short_name(tmp.path(), None).unwrap();
+    assert!(config::load_or_create(tmp.path())
+        .unwrap()
+        .device
+        .short_name
+        .is_none());
+
+    let refilled = config::ensure_default_short_name(tmp.path(), "my-machine").unwrap();
+    assert_eq!(refilled.as_deref(), Some("my-machine"), "清空后再次调用应填回");
+}
+
+#[test]
+fn ensure_default_short_name_is_idempotent() {
+    let tmp = tempfile::tempdir().unwrap();
+    let first = config::ensure_default_short_name(tmp.path(), "my-machine").unwrap();
+    let text_before = fs::read_to_string(tmp.path().join(CONFIG_FILE_NAME)).unwrap();
+
+    let second = config::ensure_default_short_name(tmp.path(), "my-machine").unwrap();
+    assert_eq!(first, second);
+    let text_after = fs::read_to_string(tmp.path().join(CONFIG_FILE_NAME)).unwrap();
+    assert_eq!(text_before, text_after, "二次调用不应重写文件");
+}
+
+#[test]
 fn long_term_token_created_persisted_and_repaired() {
     let tmp = tempfile::tempdir().unwrap();
     let first = config::load_or_create(tmp.path()).unwrap();
