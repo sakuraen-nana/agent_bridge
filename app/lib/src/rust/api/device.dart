@@ -14,3 +14,10 @@ import 'pair.dart';
 /// 短名不合法时返回可读错误（界面展示），原值保持不变。
 Future<AppSnapshot> setShortName({String? name}) =>
     RustLib.instance.api.crateApiDeviceSetShortName(name: name);
+
+/// 启动补全：本机短名为空时以本机设备名（主机名）初始化；返回补全后生效的短名。
+///
+/// 仅由应用启动路径（Dart `main()`）调用一次——MUST NOT 并入 `app_init`：清空按钮为
+/// 刷新快照也调用 `app_init`，并入会使清空被当场填回（design D1）。
+Future<String?> ensureDefaultShortName() =>
+    RustLib.instance.api.crateApiDeviceEnsureDefaultShortName();

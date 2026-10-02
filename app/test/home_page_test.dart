@@ -102,6 +102,9 @@ class _FakeBridgeService implements BridgeService {
       nextSystem ?? _current.system;
 
   @override
+  Future<String?> ensureDefaultShortName() async => _current.shortName;
+
+  @override
   Future<AppSnapshot> setShortName(String? name) async {
     setCalls.add(name);
     final error = errorOnSet;

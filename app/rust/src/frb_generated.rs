@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 843897259;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2082986697;
 
 // Section: executor
 
@@ -142,6 +142,41 @@ fn wire__crate__api__pair__discovered_devices_impl(
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
                         let output_ok = crate::api::pair::discovered_devices().await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__device__ensure_default_short_name_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "ensure_default_short_name",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok = crate::api::device::ensure_default_short_name().await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -894,17 +929,23 @@ fn pde_ffi_dispatcher_primary_impl(
         1 => wire__crate__api__init__app_init_impl(port, ptr, rust_vec_len, data_len),
         2 => wire__crate__api__init__autostart_status_impl(port, ptr, rust_vec_len, data_len),
         3 => wire__crate__api__pair__discovered_devices_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__init_app_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__pair__pairing_pending_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__pair__peers_status_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__init__refresh_system_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__pair__request_pairing_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__pair__respond_pairing_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__init__select_share_address_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__init__set_autostart_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__device__set_short_name_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__init__share_payload_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__init__tray_host_available_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__device__ensure_default_short_name_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        5 => wire__crate__api__init_app_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__pair__pairing_pending_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__pair__peers_status_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__init__refresh_system_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__pair__request_pairing_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__pair__respond_pairing_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__init__select_share_address_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__init__set_autostart_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__device__set_short_name_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__init__share_payload_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__init__tray_host_available_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

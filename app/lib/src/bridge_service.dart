@@ -17,6 +17,12 @@ abstract class BridgeService {
   /// 设置（[name] 非空）或清空（[name] 为 null）本机短名，返回刷新后的快照。
   Future<AppSnapshot> setShortName(String? name);
 
+  /// 启动补全：本机短名为空时以本机设备名（主机名）初始化；返回补全后生效的短名。
+  ///
+  /// 仅由应用启动路径（`main()`）调用一次——不得并入 [init]：清空按钮为刷新
+  /// 快照也走 [setShortName]→`app_init`，并入会使清空被当场填回。
+  Future<String?> ensureDefaultShortName();
+
   /// 仅刷新系统信息。
   Future<SystemSnapshot> refreshSystem();
 
@@ -56,6 +62,10 @@ class RustBridgeService implements BridgeService {
   @override
   Future<AppSnapshot> setShortName(String? name) =>
       rust_device.setShortName(name: name);
+
+  @override
+  Future<String?> ensureDefaultShortName() =>
+      rust_device.ensureDefaultShortName();
 
   @override
   Future<SystemSnapshot> refreshSystem() => rust_init.refreshSystem();

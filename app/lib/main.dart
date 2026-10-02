@@ -21,6 +21,16 @@ tray.Menu? _trayMenu;
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await RustLib.init();
+
+  // 短名启动补全：为空（未设置/已清空/空值）时以本机设备名初始化，仅启动路径
+  // 调用一次（design D1）；失败不阻断启动——配置不可用等真实错误由随后的
+  // app_init 如实呈现。
+  try {
+    await RustBridgeService().ensureDefaultShortName();
+  } catch (error) {
+    debugPrint('短名启动补全失败：$error');
+  }
+
   await windowManager.ensureInitialized();
 
   // 托盘：宿主探测 + 创建失败任一不满足即降级为「关窗即退出」
