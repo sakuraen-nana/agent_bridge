@@ -154,8 +154,9 @@ scan 结果分两组输出："已确认的 bridge 服务器"（token 验证通�
 
 `app/` 子项目是新一代跨平台桌面应用（Windows / Linux）：Flutter 图形界面 + Rust 核心，以
 [flutter_rust_bridge](https://cjycode.com/flutter_rust_bridge/) 生成桥接。服务端核心与命令行、
-权限与防火墙、发现与配对、打包与安装器等能力已按五个变更**全部落地并归档**（当前版本
-`0.5.0`），行为契约见 `openspec/specs/agent-bridge-app/`；各变更归档（`openspec/changes/archive/`）
+权限与防火墙、发现与配对、打包与安装器、启动窗口与短名默认值等能力已按六个变更
+**全部落地并归档**（当前版本 `0.6.0`），行为契约见 `openspec/specs/agent-bridge-app/`；
+各变更归档（`openspec/changes/archive/`）
 的 `tasks.md` 末尾载有**待用户验收清单**（Windows 与真实桌面场景）与跟进项。
 
 **当前已实现**：设备 UUID 自动生成与持久化、本机默认短名（**为空时启动自动取本机设备名

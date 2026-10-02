@@ -40,6 +40,7 @@
 - [x] 6.3 证据登记：勾选附证据；未实跑不勾选 —— 证据：本文件各勾选项均附命令输出/几何数据/截图要点；§7 待用户验收与 §8 跟进项如实保留未勾选
 - [x] 6.4 归档前版本推进：`app/rust/Cargo.toml` `0.5.0` → `0.6.0`；验证：面板「应用版本」与版本源一致（截图/输出留证）、提交推送 —— 证据：版本源 0.6.0（Cargo.lock 同步）；CLI `agent-bridge --version` → `agent-bridge 0.6.0`；重建 Linux 束实跑截图：面板「应用版本 0.6.0」、窗口仍 480×960（720,60 居中）、短名 hermes-machine
 - [x] 6.5 `/opsx:archive` 归档；主规格核对（`openspec validate --strict --no-interactive` 通过、`openspec list` 无在途变更） —— 证据：归档前 `validate --strict` 通过、`validate --specs` 2/2 通过；差异规格已同步至主规格（「本机默认短名」替换为自动初始化语义、「启动窗口尺寸」追加）；变更移入 `openspec/changes/archive/2026-10-02-add-startup-window-and-default-short-name/`；`openspec list` → 「No active changes found」
+- [x] 6.6 归档后核对：AGENTS.md 状态行与 README 桌面应用小节更新为「当前 `0.6.0`、六个变更全部落地并归档」 —— 证据：随本提交更新（AGENTS 状态行变更序列补「启动窗口与短名默认值」；README 版本与变更数同步）
 
 ## 7. 待用户验收清单（需真机人工操作）
 
